@@ -1,23 +1,44 @@
-# 🚀 DayFlow: Focus. Flow. Flourish.
+# DayFlow - Smart Productivity for Gen Z Cambodia
 
-**DayFlow** is a modern, high-performance productivity application designed to help users manage their time, build habits, and reach their full potential.
+DayFlow is a smart daily life management app designed for the vibrant youth of Cambodia. Built by **Sokhavy Thoeun**, it combines task management, habit tracking, mood analysis, and an AI-powered life coach.
 
-## ✨ Key Features
-- **🎯 Smart Planner**: Organize tasks with categories, deadlines, and smart priority levels.
-- **🔥 Habit Tracker**: Build consistency with real-time streak counting and activity tracking.
-- **⏲️ Focus Mode**: Deep-work timer with ambient sounds (Rain, Cafe, Lofi) and sleek progress visualizations.
-- **🧠 AI Life Coach**: Get personalized advice and planning assistance powered by Gemini AI.
-- **📊 Real-time Analytics**: Track your XP, Daily Level, and Activity Percentage based on real performance.
-- **🌍 Privacy First**: Secure account management with multi-language support.
+## 🚀 Features
+- **Smart AI Coach**: Personalized productivity advice integrated with Gemini AI.
+- **Planner**: Manage tasks with priorities and categories (Study, Business, etc.).
+- **Habit Tracker**: Build consistency with streaks and gamified progress.
+- **Mood Insights**: Emoji-based logging to track your mental well-being.
+- **Focus Mode**: Pomodoro-style timer with ambient sounds.
+- **i18n Support**: Full Khmer (ភាសាខ្មែរ) and English support.
 
-## 🛠️ Tech Stack
-- **Frontend**: React 18, TypeScript, Vite
-- **Styling**: Tailwind CSS, Framer Motion (for smooth animations)
-- **Icons**: Lucide React
-- **Backend**: Express (Node.js) with local persistent storage
+## 🛠 Tech Stack
+- **Frontend**: React + Vite + Tailwind CSS + Framer Motion
+- **Backend**: Node.js + Express
 - **AI**: Google Gemini API
+- **State/i18n**: i18next
+- **Animations**: Motion
 
-## 🚀 Getting Started
-1. Clone the repository.
-2. Run `npm install` to install dependencies.
-3. Run `npm run dev` to start the application.
+## 📦 Deployment Guide
+
+### Backend (Render / Railway / Cloud Run)
+1. Set the environment variable `GEMINI_API_KEY` in your provider dashboard.
+2. Ensure the `PORT` is set to `3000` or use the default provided by the environment.
+3. Deploy using the `npm run build` and `npm start` commands.
+
+### Frontend / App (Expo / Mobile)
+1. To convert this to a mobile app, use **Expo**:
+   ```bash
+   npx create-expo-app DayFlow --template tabs
+   ```
+2. Copy the components and logic from the `src/` directory.
+3. Use `react-native-reanimated` for similar animations.
+4. Use `expo-localization` for the language switching logic.
+
+### Android & iOS Store (EAS Build)
+1. Install EAS CLI: `npm install -g eas-cli`
+2. Configure project: `eas build:configure`
+3. Run build: `eas build --platform android` or `eas build --platform ios`
+4. Follow the prompts to generate credentials and submit to the stores.
+
+## 👤 Credits
+**Developed by Sokhavy Thoeun**
+Designed with ❤️ for the Cambodian Gen Z community.
