@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Brain, History, Frown, Meh, Smile, Heart, Star, Zap } from 'lucide-react';
+import { History, Frown, Meh, Smile, Heart, Star, Zap } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { MoodEntry } from '../types';
+import { collection, query, where, onSnapshot, orderBy, limit, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 
 export default function MoodTracker() {
   const { t } = useTranslation();
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [history, setHistory] = useState<MoodEntry[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
   
   const moods = [
     { id: 'sad', icon: Frown, label: 'Low', color: 'text-blue-400' },
@@ -17,10 +21,55 @@ export default function MoodTracker() {
     { id: 'awesome', icon: Zap, label: 'Energetic', color: 'text-amber-400' },
   ];
 
-  const history: MoodEntry[] = [
-    { id: '1', emoji: 'awesome', timestamp: new Date(Date.now() - 86400000).toISOString(), userId: '1' },
-    { id: '2', emoji: 'happy', timestamp: new Date(Date.now() - 172800000).toISOString(), userId: '1' },
-  ];
+  useEffect(() => {
+    if (!auth.currentUser) return;
+
+    const q = query(
+      collection(db, 'moods'),
+      where('userId', '==', auth.currentUser.uid),
+      orderBy('timestamp', 'desc'),
+      limit(10)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const moodData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as MoodEntry[];
+      setHistory(moodData);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleSaveMood = async () => {
+    if (!selectedMood || !auth.currentUser) return;
+    setIsSaving(true);
+    try {
+      const moodRef = doc(collection(db, 'moods'));
+      await setDoc(moodRef, {
+        userId: auth.currentUser.uid,
+        emoji: selectedMood,
+        timestamp: serverTimestamp()
+      });
+      setSelectedMood(null);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Just now';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+    }).format(date);
+  };
 
   return (
     <div className="space-y-8 pb-4">
@@ -69,9 +118,11 @@ export default function MoodTracker() {
         </div>
 
         <button 
-          disabled={!selectedMood}
-          className="w-full py-4 bg-indigo-500 disabled:opacity-30 disabled:grayscale text-white font-bold rounded-2xl shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all"
+          disabled={!selectedMood || isSaving}
+          onClick={handleSaveMood}
+          className="w-full py-4 bg-indigo-500 disabled:opacity-30 disabled:grayscale text-white font-bold rounded-2xl shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
         >
+          {isSaving && <Star className="w-4 h-4 animate-spin" />}
           {t('save')}
         </button>
       </section>
@@ -80,6 +131,9 @@ export default function MoodTracker() {
       <section className="space-y-4">
         <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-[0.2em] px-2">Recent Logs</h3>
         <div className="space-y-3">
+          {history.length === 0 && (
+            <div className="text-center py-8 text-zinc-400 text-sm italic">No entries yet</div>
+          )}
           {history.map((entry) => {
             const mood = moods.find(m => m.id === entry.emoji) || moods[2];
             const Icon = mood.icon;
@@ -91,7 +145,7 @@ export default function MoodTracker() {
                   </div>
                   <div>
                     <p className="font-bold text-zinc-900 dark:text-zinc-100">{mood.label}</p>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wider">Yesterday at 4:32 PM</p>
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-wider">{formatDate(entry.timestamp)}</p>
                   </div>
                 </div>
                 <Star className="w-4 h-4 text-emerald-400 fill-emerald-400/20" />

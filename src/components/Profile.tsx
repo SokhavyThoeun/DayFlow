@@ -27,19 +27,8 @@ export default function Profile({ user, onLogout, onUpdateUser, isDarkMode, onTo
       return;
     }
 
-    try {
-      const res = await fetch('/api/user/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, name: newName })
-      });
-      if (res.ok) {
-        onUpdateUser?.({ name: newName });
-        setIsEditingName(false);
-      }
-    } catch (error) {
-      console.error(error);
-    }
+    onUpdateUser?.({ name: newName });
+    setIsEditingName(false);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,18 +37,7 @@ export default function Profile({ user, onLogout, onUpdateUser, isDarkMode, onTo
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64String = reader.result as string;
-        try {
-          const res = await fetch('/api/user/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: user.id, avatar: base64String })
-          });
-          if (res.ok) {
-            onUpdateUser?.({ avatar: base64String });
-          }
-        } catch (error) {
-          console.error(error);
-        }
+        onUpdateUser?.({ avatar: base64String });
       };
       reader.readAsDataURL(file);
     }

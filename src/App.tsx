@@ -15,11 +15,17 @@ import Habits from './components/Habits';
 import Assistant from './components/Assistant';
 import MoodTracker from './components/MoodTracker';
 import Profile from './components/Profile';
+import Settings from './components/Settings';
 import BottomNav from './components/BottomNav';
 import FocusMode from './components/FocusMode';
 import NotificationToast from './components/NotificationToast';
 import Auth from './components/Auth';
 import { Task } from './types';
+
+// Firebase
+import { auth, db } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, query, where, onSnapshot, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -27,7 +33,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showFocusMode, setShowFocusMode] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark' | 'amoled'>('dark');
+  const [settings, setSettings] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<any[]>([]);
   
@@ -35,80 +42,137 @@ export default function App() {
   const [activeNotification, setActiveNotification] = useState<{ id: string, title: string, message: string, type: 'upcoming' | 'late' } | null>(null);
   const [notifiedTaskIds, setNotifiedTaskIds] = useState<Set<string>>(new Set());
 
-  // Auto-dismiss notification after 10 seconds
+  // Handle Theme Application
   useEffect(() => {
-    if (activeNotification) {
-      const timer = setTimeout(() => {
-        setActiveNotification(null);
-      }, 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [activeNotification]);
-
-  const fetchTasks = async () => {
-    try {
-      const res = await fetch('/api/tasks');
-      if (res.ok) {
-        const data = await res.json();
-        setTasks(data);
-      }
-    } catch (error) {
-      console.error("Fetch tasks error:", error);
-    }
-  };
-
-  const fetchHabits = async () => {
-    try {
-      const res = await fetch('/api/habits');
-      if (res.ok) {
-        const data = await res.json();
-        setHabits(data);
-      }
-    } catch (error) {
-      console.error("Fetch habits error:", error);
-    }
-  };
-
-  useEffect(() => {
-    // Check for existing session
-    const storedUser = localStorage.getItem('dayflow_user');
-    if (storedUser) setUser(JSON.parse(storedUser));
-
-    // Check for theme
-    const storedTheme = localStorage.getItem('dayflow_theme');
-    // Default to dark if not set (or set based on system pref if you prefer, but here we default to dark per user behavior)
-    const initialDarkMode = storedTheme === null ? true : storedTheme === 'dark';
-    
-    setIsDarkMode(initialDarkMode);
-    if (initialDarkMode) {
+    document.documentElement.classList.remove('dark', 'amoled');
+    if (theme === 'dark') {
       document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+    } else if (theme === 'amoled') {
+      document.documentElement.classList.add('amoled');
     }
+    localStorage.setItem('dayflow_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    // Auth Listener
+    const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
+      if (fbUser) {
+        // Sync user profile from Firestore
+        const userDocRef = doc(db, 'users', fbUser.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          setUser({ ...userDoc.data(), id: fbUser.uid });
+        } else {
+          // Create new user profile
+          const newUser = {
+            id: fbUser.uid,
+            uid: fbUser.uid,
+            name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+            email: fbUser.email,
+            avatar: fbUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${fbUser.uid}`,
+            lastMood: 'neutral',
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(userDocRef, newUser);
+          setUser(newUser);
+
+          // Create default settings
+          const settingsRef = doc(db, 'users', fbUser.uid, 'settings', 'current');
+          await setDoc(settingsRef, {
+            userId: fbUser.uid,
+            language: i18n.language || 'en',
+            theme: 'dark',
+            soundEnabled: true,
+            hapticEnabled: true,
+            animationsEnabled: true,
+            notifications: {
+              push: true,
+              taskReminders: true,
+              dailyMotivation: true,
+              studyReminders: true,
+              aiAssistant: true
+            },
+            productivity: {
+              pomoWork: 25,
+              pomoBreak: 5,
+              waterTarget: 8,
+              sleepTarget: '23:00'
+            },
+            security: {
+              faceIdEnabled: false,
+              twoFactorEnabled: false
+            }
+          });
+        }
+      } else {
+        setUser(null);
+        setSettings(null);
+      }
+      setIsLoading(false);
+    });
+
+    // Check for stored theme
+    const storedTheme = localStorage.getItem('dayflow_theme') as any;
+    if (storedTheme) setTheme(storedTheme);
     
-    // Simulate initial splash screen
-    const timer = setTimeout(() => setIsLoading(false), 2000);
-    return () => clearTimeout(timer);
+    return () => unsubscribeAuth();
   }, []);
 
+  // Sync Settings, Tasks and Habits from Firestore
   useEffect(() => {
-    if (user) {
-      fetchTasks();
-      fetchHabits();
-      
-      // Periodic refresh every 30 seconds
-      const interval = setInterval(() => {
-        fetchTasks();
-        fetchHabits();
-      }, 30000);
-      
-      return () => clearInterval(interval);
+    if (!user) {
+      setTasks([]);
+      setHabits([]);
+      setSettings(null);
+      return;
     }
+
+    const settingsRef = doc(db, 'users', user.id, 'settings', 'current');
+    const unsubscribeSettings = onSnapshot(settingsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setSettings(data);
+        if (data.theme) setTheme(data.theme);
+        if (data.language && data.language !== i18n.language) {
+          i18n.changeLanguage(data.language);
+        }
+      }
+    });
+
+    const tasksQuery = query(collection(db, 'tasks'), where('userId', '==', user.id));
+    const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
+      const taskList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
+      setTasks(taskList);
+    });
+
+    const habitsQuery = query(collection(db, 'habits'), where('userId', '==', user.id));
+    const unsubscribeHabits = onSnapshot(habitsQuery, (snapshot) => {
+      const habitList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setHabits(habitList);
+    });
+
+    return () => {
+      unsubscribeSettings();
+      unsubscribeTasks();
+      unsubscribeHabits();
+    };
   }, [user]);
+
+  // Update Settings in Firestore
+  const updateSettings = async (updatedData: any) => {
+    if (!user) return;
+    try {
+      const settingsRef = doc(db, 'users', user.id, 'settings', 'current');
+      await setDoc(settingsRef, updatedData, { merge: true });
+    } catch (error) {
+      console.error("Update settings error:", error);
+    }
+  };
 
   // Notification Checker
   useEffect(() => {
-    if (!user || tasks.length === 0) return;
+    if (!user || tasks.length === 0 || !settings?.notifications?.push) return;
 
     const checkInterval = setInterval(() => {
       const now = new Date();
@@ -149,52 +213,56 @@ export default function App() {
 
   const handleAddTask = async (task: Partial<Task>) => {
     try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...task, userId: user?.id, createdAt: new Date().toISOString(), isCompleted: false })
+      const taskRef = doc(collection(db, 'tasks'));
+      await setDoc(taskRef, {
+        ...task,
+        userId: user?.id,
+        createdAt: new Date().toISOString(),
+        isCompleted: false
       });
-      if (res.ok) {
-        fetchTasks();
-      }
     } catch (error) {
       console.error(error);
     }
   };
 
   const handleLogin = (userData: any) => {
-    setUser(userData);
-    localStorage.setItem('dayflow_user', JSON.stringify(userData));
+    // This is now handled by onAuthStateChanged listener
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('dayflow_user');
-    setActiveTab('home');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setActiveTab('home');
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
-  const updateUser = (updatedData: any) => {
-    const newUser = { ...user, ...updatedData };
-    setUser(newUser);
-    localStorage.setItem('dayflow_user', JSON.stringify(newUser));
+  const updateUser = async (updatedData: any) => {
+    if (!user) return;
+    try {
+      const userDocRef = doc(db, 'users', user.id);
+      await setDoc(userDocRef, { ...user, ...updatedData }, { merge: true });
+      setUser((prev: any) => ({ ...prev, ...updatedData }));
+    } catch (error) {
+      console.error("Update user error:", error);
+    }
   };
 
   const toggleTheme = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    if (newMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('dayflow_theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('dayflow_theme', 'light');
-    }
+    let nextTheme: 'light' | 'dark' | 'amoled';
+    if (theme === 'light') nextTheme = 'dark';
+    else if (theme === 'dark') nextTheme = 'amoled';
+    else nextTheme = 'light';
+    
+    setTheme(nextTheme);
+    updateSettings({ theme: nextTheme });
   };
 
   const openFocusMode = () => setShowFocusMode(true);
   const closeFocusMode = () => setShowFocusMode(false);
-  const openProfile = () => setActiveTab('profile'); // Switch to tab instead of overlay
-  const closeProfile = () => setActiveTab('home');
+  const openSettings = () => setActiveTab('settings');
+  const closeSettings = () => setActiveTab('home');
 
   if (isLoading) {
     return (
@@ -280,7 +348,7 @@ export default function App() {
       case 'home': return (
         <Dashboard 
           onOpenFocus={openFocusMode} 
-          onOpenProfile={openProfile} 
+          onOpenSettings={openSettings} 
           userName={user.name} 
           userAvatar={user.avatar} 
           onPlanMyDay={() => goToAssistantWithPrompt(t('plan_my_day'))}
@@ -296,7 +364,7 @@ export default function App() {
           userMood={user.lastMood}
         />
       );
-      case 'planner': return <Planner initialTasks={tasks} onRefresh={fetchTasks} />;
+      case 'planner': return <Planner initialTasks={tasks} />;
       case 'habits': return (
         <Habits 
           stats={{
@@ -308,16 +376,18 @@ export default function App() {
       );
       case 'assistant': return <Assistant onAddTask={handleAddTask} />;
       case 'mood': return <MoodTracker />;
-      case 'profile': return (
-        <Profile 
+      case 'settings': return (
+        <Settings 
           user={user} 
+          settings={settings}
           onLogout={handleLogout} 
           onUpdateUser={updateUser}
-          isDarkMode={isDarkMode}
+          onUpdateSettings={updateSettings}
+          theme={theme}
           onToggleTheme={toggleTheme}
         />
       );
-      default: return <Dashboard onOpenFocus={openFocusMode} onOpenProfile={openProfile} userName={user.name} onPlanMyDay={() => goToAssistantWithPrompt(t('plan_my_day'))} />;
+      default: return <Dashboard onOpenFocus={openFocusMode} onOpenSettings={openSettings} userName={user.name} onPlanMyDay={() => goToAssistantWithPrompt(t('plan_my_day'))} />;
     }
   };
 

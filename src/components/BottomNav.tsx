@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Home, Calendar, RefreshCcw, MessageSquare, Smile, User } from 'lucide-react';
+import { Home, Calendar, RefreshCcw, MessageSquare, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/utils';
 
@@ -16,7 +16,7 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
     { id: 'planner', icon: Calendar, label: t('nav_planner') },
     { id: 'assistant', icon: MessageSquare, label: t('nav_assistant'), featured: true },
     { id: 'habits', icon: RefreshCcw, label: t('nav_habits') },
-    { id: 'profile', icon: User, label: t('profile') },
+    { id: 'settings', icon: Settings, label: 'Settings' },
   ];
 
   return (

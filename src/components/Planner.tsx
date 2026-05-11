@@ -4,13 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { Plus, CheckCircle2, Circle, Clock, Tag, ChevronRight, Edit2, Trash2, MapPin, AlignLeft } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Task, TaskCategory, TaskPriority } from '../types';
+import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 
 interface PlannerProps {
   initialTasks?: Task[];
-  onRefresh?: () => void;
 }
 
-export default function Planner({ initialTasks = [], onRefresh }: PlannerProps) {
+export default function Planner({ initialTasks = [] }: PlannerProps) {
   const { t, i18n } = useTranslation();
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -22,14 +23,8 @@ export default function Planner({ initialTasks = [], onRefresh }: PlannerProps) 
 
   const handleToggleTask = async (task: Task) => {
     try {
-      const res = await fetch(`/api/tasks/${task.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isCompleted: !task.isCompleted })
-      });
-      if (res.ok) {
-        onRefresh?.();
-      }
+      const taskRef = doc(db, 'tasks', task.id);
+      await updateDoc(taskRef, { isCompleted: !task.isCompleted });
     } catch (error) {
       console.error(error);
     }
@@ -37,12 +32,8 @@ export default function Planner({ initialTasks = [], onRefresh }: PlannerProps) 
 
   const handleDeleteTask = async (id: string) => {
     try {
-      const res = await fetch(`/api/tasks/${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        onRefresh?.();
-      }
+      const taskRef = doc(db, 'tasks', id);
+      await deleteDoc(taskRef);
     } catch (error) {
       console.error(error);
     }
@@ -67,7 +58,7 @@ export default function Planner({ initialTasks = [], onRefresh }: PlannerProps) 
   };
 
   const handleSaveTask = async () => {
-    if (!newTaskTitle.trim()) return;
+    if (!newTaskTitle.trim() || !auth.currentUser) return;
     
     const taskData = { 
       title: newTaskTitle, 
@@ -78,32 +69,20 @@ export default function Planner({ initialTasks = [], onRefresh }: PlannerProps) 
 
     try {
       if (editingTask) {
-        const res = await fetch(`/api/tasks/${editingTask.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(taskData)
-        });
-        if (res.ok) {
-          resetForm();
-          onRefresh?.();
-        }
+        const taskRef = doc(db, 'tasks', editingTask.id);
+        await updateDoc(taskRef, taskData);
       } else {
-        const res = await fetch('/api/tasks', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...taskData,
-            category: TaskCategory.PERSONAL, 
-            priority: TaskPriority.MEDIUM,
-            isCompleted: false,
-            createdAt: new Date().toISOString()
-          })
+        const newTaskRef = doc(collection(db, 'tasks'));
+        await setDoc(newTaskRef, {
+          ...taskData,
+          userId: auth.currentUser.uid,
+          category: TaskCategory.PERSONAL, 
+          priority: TaskPriority.MEDIUM,
+          isCompleted: false,
+          createdAt: new Date().toISOString()
         });
-        if (res.ok) {
-          resetForm();
-          onRefresh?.();
-        }
       }
+      resetForm();
     } catch (error) {
       console.error(error);
     }

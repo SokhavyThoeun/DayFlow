@@ -1,6 +1,6 @@
 {
   "name": "DayFlow",
-  "description": "A smart daily productivity and life management app for Gen Z in Cambodia, featuring an AI coach, habit tracking, and mood analysis.",
-  "requestFramePermissions": [],
+  "description": "A premium AI-powered productivity app developed by Sokhavy Thoeun. Features include smart scheduling, habit tracking, mood analysis, and localized Khmer tools for Gen Z.",
+  "requestFramePermissions": ["camera", "microphone"],
   "majorCapabilities": []
 }

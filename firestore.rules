@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Profile Rules
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.keys().hasAll(['uid', 'name', 'email']) &&
+               data.uid is string &&
+               data.uid == request.auth.uid &&
+               data.name is string && data.name.size() > 0 &&
+               data.email is string && data.email.size() > 0;
+      }
+
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'avatar', 'lastMood'])
+      );
+    }
+
+    // Task Rules
+    match /tasks/{taskId} {
+      function isValidTask(data) {
+        return data.keys().hasAll(['userId', 'title']) &&
+               data.userId == request.auth.uid &&
+               data.title is string && data.title.size() > 0 && data.title.size() <= 200;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidTask(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidTask(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'deadline', 'isCompleted'])
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    // Habit Rules
+    match /habits/{habitId} {
+      function isValidHabit(data) {
+        return data.keys().hasAll(['userId', 'title']) &&
+               data.userId == request.auth.uid &&
+               data.title is string && data.title.size() > 0 && data.title.size() <= 100;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidHabit(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidHabit(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'icon', 'streak', 'history'])
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    // Mood Rules
+    match /moods/{moodId} {
+      function isValidMood(data) {
+        return data.keys().hasAll(['userId', 'emoji', 'timestamp']) &&
+               data.userId == request.auth.uid &&
+               data.emoji is string && data.emoji.size() > 0;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidMood(incoming());
+      allow update, delete: if false; // Mood entries are typically immutable logs
+    }
+
+    // Settings Rules
+    match /users/{userId}/settings/{settingId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}

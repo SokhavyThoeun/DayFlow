@@ -1,8 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Flame, Trophy, Star, Plus, Check, Edit2, Trash2, X } from 'lucide-react';
+import { Trophy, Star, Plus, Check, Edit2, Trash2, X } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 
 interface Habit {
   id: string;
@@ -18,51 +20,30 @@ interface HabitProps {
     level: number;
     progress: number;
   };
+  habits?: Habit[];
 }
 
-export default function Habits({ stats = { xp: 0, level: 1, progress: 0 } }: HabitProps) {
+export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habits = [] }: HabitProps) {
   const { t } = useTranslation();
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [habitTitle, setHabitTitle] = useState('');
 
-  const fetchHabits = async () => {
-    try {
-      const res = await fetch('/api/habits');
-      if (res.ok) {
-        const data = await res.json();
-        setHabits(data);
-      }
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHabits();
-  }, []);
-
   const handleSaveHabit = async () => {
-    if (!habitTitle.trim()) return;
+    if (!habitTitle.trim() || !auth.currentUser) return;
     try {
       if (editingHabit) {
-        const res = await fetch(`/api/habits/${editingHabit.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: habitTitle })
-        });
-        if (res.ok) fetchHabits();
+        const habitRef = doc(db, 'habits', editingHabit.id);
+        await updateDoc(habitRef, { title: habitTitle });
       } else {
-        const res = await fetch('/api/habits', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: habitTitle, streak: 0, createdAt: new Date().toISOString() })
+        const habitRef = doc(collection(db, 'habits'));
+        await setDoc(habitRef, {
+          userId: auth.currentUser.uid,
+          title: habitTitle,
+          streak: 0,
+          history: [],
+          createdAt: new Date().toISOString()
         });
-        if (res.ok) fetchHabits();
       }
       resetForm();
     } catch (error) {
@@ -73,10 +54,8 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 } }: Hab
   const handleDeleteHabit = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/habits/${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) fetchHabits();
+      const habitRef = doc(db, 'habits', id);
+      await deleteDoc(habitRef);
     } catch (error) {
       console.error(error);
     }
@@ -92,16 +71,12 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 } }: Hab
       newHistory.push(today);
     }
 
-    // Simple streak calculation (just for show in this demo, real one would check consecutive days)
+    // Simple streak calculation
     const newStreak = newHistory.includes(today) ? habit.streak + 1 : Math.max(0, habit.streak - 1);
 
     try {
-      const res = await fetch(`/api/habits/${habit.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: newHistory, streak: newStreak })
-      });
-      if (res.ok) fetchHabits();
+      const habitRef = doc(db, 'habits', habit.id);
+      await updateDoc(habitRef, { history: newHistory, streak: newStreak });
     } catch (error) {
       console.error(error);
     }
@@ -137,8 +112,6 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 } }: Hab
   }, []);
 
   const daysLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-  if (isLoading) return <div className="h-40 flex items-center justify-center"><div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" /></div>;
 
   return (
     <div className="space-y-8 pb-4">

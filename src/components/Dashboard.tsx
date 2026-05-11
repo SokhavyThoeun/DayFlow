@@ -6,7 +6,7 @@ import { formatDate, cn } from '../lib/utils';
 
 interface DashboardProps {
   onOpenFocus: () => void;
-  onOpenProfile: () => void;
+  onOpenSettings: () => void;
   onPlanMyDay?: () => void;
   userName?: string;
   userAvatar?: string;
@@ -19,7 +19,7 @@ interface DashboardProps {
 
 export default function Dashboard({ 
   onOpenFocus, 
-  onOpenProfile, 
+  onOpenSettings, 
   onPlanMyDay, 
   userName, 
   userAvatar,
@@ -80,7 +80,7 @@ export default function Dashboard({
           </h1>
         </div>
         <button 
-          onClick={onOpenProfile}
+          onClick={onOpenSettings}
           className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/5 flex items-center justify-center overflow-hidden active:scale-90 transition-transform shadow-xl"
         >
           <img 

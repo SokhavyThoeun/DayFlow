@@ -19,6 +19,10 @@
   .dark body {
     @apply bg-zinc-900 text-zinc-100;
   }
+
+  .amoled body {
+    @apply bg-black text-zinc-100;
+  }
 }
 
 /* Custom scrollbar for dark mode */

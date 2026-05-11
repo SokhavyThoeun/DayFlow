@@ -1,0 +1,120 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatar": { "type": "string" },
+        "lastMood": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A productivity task",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "isCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title"]
+    },
+    "Habit": {
+      "title": "Habit",
+      "description": "A daily habit tracker",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "icon": { "type": "string" },
+        "streak": { "type": "integer" },
+        "history": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title"]
+    },
+    "Mood": {
+      "title": "Mood Entry",
+      "description": "A daily mood check-in",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "emoji": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "emoji", "timestamp"]
+    },
+    "UserSettings": {
+      "title": "User Settings",
+      "description": "User preferences and settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "language": { "type": "string" },
+        "theme": { "type": "string" },
+        "soundEnabled": { "type": "boolean" },
+        "hapticEnabled": { "type": "boolean" },
+        "animationsEnabled": { "type": "boolean" },
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "push": { "type": "boolean" },
+            "taskReminders": { "type": "boolean" },
+            "dailyMotivation": { "type": "boolean" },
+            "studyReminders": { "type": "boolean" },
+            "aiAssistant": { "type": "boolean" }
+          }
+        },
+        "productivity": {
+          "type": "object",
+          "properties": {
+            "pomoWork": { "type": "integer" },
+            "pomoBreak": { "type": "integer" },
+            "waterTarget": { "type": "integer" },
+            "sleepTarget": { "type": "string" }
+          }
+        },
+        "security": {
+          "type": "object",
+          "properties": {
+             "faceIdEnabled": { "type": "boolean" },
+             "twoFactorEnabled": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Store user profile"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "UserSettings",
+      "description": "User settings document (id is usually 'current')"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Store user tasks"
+    },
+    "/habits/{habitId}": {
+      "schema": "Habit",
+      "description": "Store user habits"
+    },
+    "/moods/{moodId}": {
+      "schema": "Mood",
+      "description": "Store user mood entries"
+    }
+  }
+}
