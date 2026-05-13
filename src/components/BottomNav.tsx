@@ -2,6 +2,8 @@ import { motion } from 'motion/react';
 import { Home, Calendar, RefreshCcw, MessageSquare, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/utils';
+import { audioService } from '../lib/audio';
+import { hapticService } from '../lib/haptics';
 
 interface BottomNavProps {
   activeTab: string;
@@ -10,6 +12,14 @@ interface BottomNavProps {
 
 export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
   const { t } = useTranslation();
+
+  const handleTabClick = (tabId: string) => {
+    if (tabId !== activeTab) {
+      audioService.playClick();
+      hapticService.light();
+      setActiveTab(tabId);
+    }
+  };
 
   const tabs = [
     { id: 'home', icon: Home, label: t('nav_dashboard') },
@@ -30,13 +40,13 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 className="relative -top-8 group"
               >
                 <div className={cn(
                   "w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-xl",
                   isActive 
-                    ? "bg-indigo-500 shadow-indigo-500/40" 
+                    ? "bg-accent shadow-accent/40" 
                     : "bg-white dark:bg-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-100 dark:border-white/5 shadow-black/10 dark:shadow-black/40"
                 )}>
                   <Icon className={cn(
@@ -47,7 +57,7 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
                 {isActive && (
                   <motion.div 
                     layoutId="featured-active"
-                    className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-indigo-500"
+                    className="absolute -bottom-6 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent"
                   />
                 )}
               </button>
@@ -57,23 +67,23 @@ export default function BottomNav({ activeTab, setActiveTab }: BottomNavProps) {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabClick(tab.id)}
               className="flex flex-col items-center justify-center space-y-1 relative px-2 transition-opacity active:opacity-60"
             >
               <Icon className={cn(
                 "w-6 h-6 transition-all duration-300",
-                isActive ? "text-indigo-500 scale-110" : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
+                isActive ? "text-accent scale-110" : "text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-400"
               )} />
               <span className={cn(
                 "text-[10px] font-bold transition-colors duration-300",
-                isActive ? "text-indigo-500 opacity-100" : "text-zinc-400 dark:text-zinc-600 opacity-0"
+                isActive ? "text-accent opacity-100" : "text-zinc-400 dark:text-zinc-600 opacity-0"
               )}>
                 {tab.label}
               </span>
               {isActive && (
                 <motion.div 
                   layoutId="active-indicator"
-                  className="absolute -top-3 w-4 h-1 rounded-full bg-indigo-500/50 blur-[2px]"
+                  className="absolute -top-3 w-4 h-1 rounded-full bg-accent/50 blur-[2px]"
                 />
               )}
             </button>

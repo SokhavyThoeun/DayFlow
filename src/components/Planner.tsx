@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Plus, CheckCircle2, Circle, Clock, Tag, ChevronRight, Edit2, Trash2, MapPin, AlignLeft } from 'lucide-react';
+import { Plus, CheckCircle2, Circle, Clock, Tag, ChevronRight, Edit2, Trash2, MapPin, AlignLeft, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Task, TaskCategory, TaskPriority } from '../types';
 import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
@@ -161,14 +161,16 @@ export default function Planner({ initialTasks = [] }: PlannerProps) {
                 )}
               </button>
 
-              <div className="flex-1 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className={cn(
-                    "font-bold text-[15px] transition-all flex-1",
-                    task.isCompleted ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-900 dark:text-white"
-                  )}>
-                    {task.title}
-                  </h3>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className={cn(
+                      "font-bold text-[15px] transition-all truncate",
+                      task.isCompleted ? "text-zinc-400 dark:text-zinc-500 line-through" : "text-zinc-900 dark:text-white"
+                    )}>
+                      {task.title}
+                    </h3>
+                  </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => openEditModal(task)}
@@ -189,31 +191,38 @@ export default function Planner({ initialTasks = [] }: PlannerProps) {
                   </div>
                 </div>
                 
-                <div className="flex flex-wrap gap-2">
-                  <span className={cn("text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider flex items-center gap-1", getPriorityColor(task.priority))}>
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest", getPriorityColor(task.priority))}>
                     {task.priority}
                   </span>
                   {task.location && (
-                    <span className="text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase tracking-widest bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border border-zinc-100 dark:border-white/5 flex items-center gap-1">
+                      <MapPin className="w-2.5 h-2.5" />
                       {task.location}
                     </span>
                   )}
-                  {task.description && (
-                    <span className="text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 flex items-center gap-1">
-                      <AlignLeft className="w-3 h-3" />
-                    </span>
-                  )}
                   {task.deadline && (
-                    <span className="text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider bg-zinc-50 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 flex items-center gap-1 ml-auto">
-                      <Clock className="w-3 h-3" />
-                      {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    <span className={cn(
+                      "text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-widest flex items-center gap-1 transition-all ml-auto",
+                      !task.isCompleted && new Date(task.deadline) < new Date()
+                        ? "bg-rose-500 text-white shadow-lg shadow-rose-500/20" 
+                        : "bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400"
+                    )}>
+                      {(!task.isCompleted && new Date(task.deadline) < new Date()) ? (
+                        <>
+                          <AlertTriangle className="w-2.5 h-2.5 animate-pulse" />
+                          OVERDUE • {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="w-2.5 h-2.5" />
+                          {new Date(task.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        </>
+                      )}
                     </span>
                   )}
                 </div>
               </div>
-              
-              <ChevronRight className="w-5 h-5 text-zinc-300 dark:text-zinc-700 group-hover:text-zinc-500 self-center" />
             </motion.div>
           ))
         ) : (

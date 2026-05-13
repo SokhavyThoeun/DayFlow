@@ -93,6 +93,17 @@
         }
       },
       "required": ["userId"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "An AI assistant chat message",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "sender": { "type": "string", "enum": ["user", "ai"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "sender", "timestamp"]
     }
   },
   "firestore": {
@@ -115,6 +126,10 @@
     "/moods/{moodId}": {
       "schema": "Mood",
       "description": "Store user mood entries"
+    },
+    "/users/{userId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Store AI assistant chat messages as a subcollection of user"
     }
   }
 }

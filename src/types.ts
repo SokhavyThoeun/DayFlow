@@ -27,10 +27,11 @@ export interface Task {
 export interface Habit {
   id: string;
   title: string;
-  days: boolean[]; // 7 days of the week
+  time?: string; // HH:mm format
+  history: string[]; // ISO string dates (YYYY-MM-DD)
   streak: number;
-  lastCompleted?: string;
   userId: string;
+  createdAt: string;
 }
 
 export interface MoodEntry {

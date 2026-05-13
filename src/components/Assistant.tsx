@@ -1,12 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Send, Sparkles, User, Bot, Loader2, ArrowRight, Plus, Calendar, Clock, Check } from 'lucide-react';
+import { Send, Sparkles, User, Bot, Loader2, ArrowRight, Plus, Calendar, Clock, Check, History, Trash2 } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
 import { Message, TaskCategory, TaskPriority } from '../types';
 import { getCoachResponse } from '../services/ai';
 
 interface AssistantProps {
+  user: any;
   onAddTask?: (task: any) => void;
 }
 
@@ -116,14 +119,50 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, onAddTask }) => {
   );
 };
 
-export default function Assistant({ onAddTask }: AssistantProps) {
+export default function Assistant({ user, onAddTask }: AssistantProps) {
   const { t, i18n } = useTranslation();
-  const [messages, setMessages] = useState<Message[]>([
-    { id: '1', text: t('assistant_greeting'), sender: 'ai', timestamp: new Date().toISOString() }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setMessages([{ id: 'default-greeting', text: t('assistant_greeting'), sender: 'ai', timestamp: new Date().toISOString() }]);
+      setIsLoadingHistory(false);
+      return;
+    }
+
+    const messagesRef = collection(db, 'users', user.id, 'messages');
+    const q = query(
+      messagesRef,
+      orderBy('timestamp', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const historicalMessages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Message[];
+      
+      if (historicalMessages.length === 0) {
+        setMessages([{ id: 'default-greeting', text: t('assistant_greeting'), sender: 'ai', timestamp: new Date().toISOString() }]);
+      } else {
+        setMessages(historicalMessages);
+      }
+      setIsLoadingHistory(false);
+    }, (error) => {
+      console.error("Error loading chat history:", error);
+      // Fallback for permission errors or missing indexes
+      if (messages.length === 0) {
+        setMessages([{ id: 'error-greeting', text: "Welcome! Start a new conversation to begin.", sender: 'ai', timestamp: new Date().toISOString() }]);
+      }
+      setIsLoadingHistory(false);
+    });
+
+    return () => unsubscribe();
+  }, [t, user?.id]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -139,34 +178,55 @@ export default function Assistant({ onAddTask }: AssistantProps) {
     }
   }, []);
 
-  const handleSend = async (textOverride?: string) => {
-    const text = textOverride || inputValue;
-    if (!text.trim()) return;
+  const handleSend = async (textOverride?: any) => {
+    const text = typeof textOverride === 'string' ? textOverride : inputValue;
+    if (!text || typeof text.trim !== 'function' || !text.trim()) return;
+    if (!user) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
+    const userMessageData = {
       text: text,
-      sender: 'user',
+      sender: 'user' as const,
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, userMessage]);
     if (!textOverride) setInputValue('');
     setIsTyping(true);
 
     try {
+      // Save user message in subcollection
+      const messagesRef = collection(db, 'users', user.id, 'messages');
+      await addDoc(messagesRef, userMessageData);
+
       const response = await getCoachResponse(text, { locale: i18n.language });
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+      
+      // Save AI message in subcollection
+      const aiMessageData = {
         text: response,
-        sender: 'ai',
+        sender: 'ai' as const,
         timestamp: new Date().toISOString()
       };
-      setMessages(prev => [...prev, aiMessage]);
+      await addDoc(messagesRef, aiMessageData);
+
     } catch (error) {
       console.error(error);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!user || !window.confirm('Clear all chat history?')) return;
+    
+    try {
+      const messagesRef = collection(db, 'users', user.id, 'messages');
+      const snapshot = await getDocs(messagesRef);
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Error clearing history:", error);
     }
   };
 
@@ -179,17 +239,28 @@ export default function Assistant({ onAddTask }: AssistantProps) {
   return (
     <div className="h-[calc(100vh-180px)] flex flex-col pt-2">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-          <Sparkles className="w-6 h-6 text-white" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">FlowCoach AI</h1>
-          <div className="flex items-center gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest">Always Listening</span>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <Sparkles className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">FlowCoach AI</h1>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-widest">Always Listening</span>
+            </div>
           </div>
         </div>
+        {messages.length > 1 && (
+          <button 
+            onClick={handleClearHistory}
+            className="p-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-xl text-zinc-400 dark:text-zinc-600 hover:text-rose-500 transition-all active:scale-95 flex items-center gap-2"
+          >
+            <History size={16} />
+            <span className="text-[10px] font-bold uppercase tracking-widest">Clear</span>
+          </button>
+        )}
       </div>
 
       {/* Chat Area */}
@@ -198,13 +269,21 @@ export default function Assistant({ onAddTask }: AssistantProps) {
         className="flex-1 overflow-y-auto space-y-4 px-1 pb-4 scrollbar-hide"
       >
         <AnimatePresence initial={false}>
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} onAddTask={onAddTask} />
-          ))}
+          {isLoadingHistory ? (
+            <div className="flex flex-col items-center justify-center h-full space-y-3">
+              <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Loading flow history...</p>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <MessageBubble key={msg.id} msg={msg} onAddTask={onAddTask} />
+            ))
+          )}
           {isTyping && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
+              key="typing-indicator"
               className="flex items-center gap-2"
             >
               <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center">
@@ -222,9 +301,9 @@ export default function Assistant({ onAddTask }: AssistantProps) {
       <div className="mt-4 space-y-4">
         {/* Suggestion Chips */}
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {suggestions.map((s) => (
+          {suggestions.map((s, idx) => (
             <button 
-              key={s.label}
+              key={`suggest-${idx}`}
               onClick={() => handleSend(s.label)}
               className="whitespace-nowrap px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 rounded-full text-xs font-bold text-zinc-400 dark:text-zinc-500 hover:text-indigo-500 dark:hover:text-white transition-colors flex items-center gap-2 shadow-sm"
             >
@@ -244,7 +323,7 @@ export default function Assistant({ onAddTask }: AssistantProps) {
             className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 rounded-full py-4 pl-6 pr-14 text-zinc-900 dark:text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors shadow-2xl dark:shadow-none"
           />
           <button 
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!inputValue.trim()}
             className="absolute right-2 top-2 w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white disabled:opacity-50 disabled:grayscale active:scale-90 transition-all"
           >

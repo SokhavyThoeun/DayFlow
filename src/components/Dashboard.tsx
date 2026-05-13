@@ -1,6 +1,8 @@
 import { motion } from 'motion/react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { audioService } from '../lib/audio';
+import { hapticService } from '../lib/haptics';
 import { Sparkles, TrendingUp, Zap, Target, BookOpen, ChevronRight, Sun, Frown, Meh, Smile, Heart } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
 
@@ -92,19 +94,19 @@ export default function Dashboard({
       </section>
 
       {/* Stats Grid */}
-      <section className="grid grid-cols-3 gap-3">
+      <section className="grid grid-cols-3 gap-4">
         {dashboardStats.map((stat) => (
-          <div key={stat.id} className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 p-3 rounded-2xl flex flex-col items-center shadow-sm dark:shadow-none hover:border-indigo-500/50 transition-colors">
-            <div className={`p-2 rounded-xl ${stat.bg} mb-2 group-hover:scale-110 transition-transform`}>
-              <stat.icon className={`w-4 h-4 ${stat.color}`} />
+          <div key={stat.id} className="group bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 p-4 rounded-3xl flex flex-col items-center shadow-sm dark:shadow-none hover:border-accent/30 hover:shadow-lg transition-all duration-300">
+            <div className={`p-2.5 rounded-2xl ${stat.bg} mb-3 group-hover:scale-110 transition-transform duration-300`}>
+              <stat.icon className={`w-5 h-5 ${stat.color}`} />
             </div>
-            <span className="text-xl font-bold text-zinc-900 dark:text-white leading-none">{stat.value}</span>
-            <span className="text-[10px] text-zinc-500 font-bold uppercase mt-1 tracking-tighter">{stat.label}</span>
+            <span className="text-2xl font-black text-zinc-900 dark:text-white leading-none tracking-tight">{stat.value}</span>
+            <span className="text-[10px] text-zinc-500 font-black uppercase mt-1.5 tracking-widest">{stat.label}</span>
             
             {stat.id === 'level' && (
-              <div className="w-full h-1 bg-zinc-100 dark:bg-zinc-800 rounded-full mt-2 overflow-hidden px-0.5">
+              <div className="w-full h-1.5 bg-zinc-100 dark:bg-zinc-800 rounded-full mt-3 overflow-hidden p-[2px]">
                 <div 
-                  className="h-full bg-blue-400 rounded-full" 
+                  className="h-full bg-blue-400 rounded-full shadow-[0_0_8px_rgba(96,165,250,0.4)]" 
                   style={{ width: `${(stats.xp % 500) / 5}%` }} 
                 />
               </div>
@@ -114,40 +116,41 @@ export default function Dashboard({
       </section>
 
       {/* Activity Tracker Section */}
-      <section className="bg-white dark:bg-zinc-800/40 border border-zinc-200 dark:border-white/5 p-6 rounded-[2.5rem] space-y-6 shadow-sm">
+      <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 p-7 rounded-[2.5rem] space-y-7 shadow-sm dark:shadow-none transition-all">
         <div className="flex items-center justify-between">
-          <div className="flex flex-col">
-            <h3 className="font-bold text-lg">{t('activity_tracker')}</h3>
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">{stats.progress}% {t('completed')} {t('today')}</span>
+          <div className="flex flex-col gap-1">
+            <h3 className="font-black text-lg tracking-tight">{t('activity_tracker')}</h3>
+            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-[0.15em]">{stats.progress}% {t('completed')} {t('today')}</span>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-emerald-400/10 flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-emerald-400" />
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/10">
+            <TrendingUp className="w-6 h-6 text-emerald-500" />
           </div>
         </div>
 
         {/* Mini Progress Bar */}
-        <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+        <div className="h-3 w-full bg-zinc-50 dark:bg-zinc-800/50 rounded-full overflow-hidden p-1 shadow-inner">
           <motion.div 
             initial={{ width: 0 }}
             animate={{ width: `${stats.progress}%` }}
-            className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+            transition={{ duration: 1.5, ease: "circOut" }}
+            className="h-full bg-emerald-500 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)]"
           />
         </div>
 
-        <div className="flex justify-between items-center px-1">
+        <div className="flex justify-between items-center gap-2">
           {activeStats.map((day, idx) => (
-            <div key={idx} className="flex flex-col items-center gap-3">
+            <div key={idx} className="flex-1 flex flex-col items-center gap-3">
               <span className={cn(
-                "text-[10px] font-bold uppercase tracking-widest",
-                idx === activeStats.length - 1 ? "text-indigo-500" : "text-zinc-400 dark:text-zinc-500"
+                "text-[9px] font-black uppercase tracking-widest",
+                idx === activeStats.length - 1 ? "text-accent" : "text-zinc-300 dark:text-zinc-600"
               )}>{day.label}</span>
               <div className={cn(
-                "w-10 h-10 rounded-2xl border transition-all duration-500 group relative",
+                "w-full aspect-square rounded-2xl border transition-all duration-700 group relative flex items-center justify-center max-w-[40px]",
                 day.active 
-                  ? "bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-500/20" 
-                  : "bg-zinc-50 dark:bg-zinc-800 border-zinc-100 dark:border-white/5"
+                  ? "bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/30" 
+                  : "bg-white dark:bg-zinc-800 border-zinc-100 dark:border-white/5"
               )}>
-                {day.active && <Sparkles className="w-3 h-3 text-white absolute top-1 right-1 opacity-50" />}
+                {day.active && <Sparkles className="w-4 h-4 text-white/50" />}
               </div>
             </div>
           ))}
@@ -155,23 +158,27 @@ export default function Dashboard({
       </section>
 
       {/* Hero Coach Card */}
-      <section className="relative overflow-hidden group rounded-[2.5rem]">
-        <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 to-purple-700 mix-blend-overlay opacity-80 z-0" />
-        <div className="absolute -right-8 -top-8 w-32 h-32 bg-white/10 rounded-full blur-3xl z-0" />
+      <section className="relative overflow-hidden group rounded-[2.5rem] shadow-2xl shadow-accent/20">
+        <div className="absolute inset-0 bg-accent transition-transform duration-700 group-hover:scale-110 z-0" />
+        <div className="absolute -right-8 -top-8 w-40 h-40 bg-white/20 rounded-full blur-3xl z-0" />
+        <div className="absolute left-1/4 bottom-0 w-20 h-20 bg-accent-400/20 rounded-full blur-2xl z-0" />
         
-        <div className="relative z-10 bg-white/10 dark:bg-zinc-800/60 backdrop-blur-md border border-white/20 p-6 rounded-[2.5rem] shadow-xl space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white dark:bg-indigo-500 flex items-center justify-center shadow-lg">
-              <Sparkles className="w-6 h-6 text-indigo-500 dark:text-white" />
+        <div className="relative z-10 bg-white/5 dark:bg-zinc-900/40 backdrop-blur-xl border border-white/20 p-8 rounded-[2.5rem] space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-xl rotate-3 group-hover:rotate-0 transition-transform">
+              <Sparkles className="w-7 h-7 text-accent" />
             </div>
-            <h2 className="font-bold text-lg text-white">{t('nav_assistant')}</h2>
+            <div>
+              <h2 className="font-black text-xl text-white tracking-tight">{t('nav_assistant')}</h2>
+              <p className="text-[10px] text-white/60 uppercase font-black tracking-widest">AI FlowCoach</p>
+            </div>
           </div>
-          <p className="text-zinc-50 dark:text-zinc-200 text-sm leading-relaxed font-medium">
-            "You have 3 study tasks today. Start with 15 mins of concentration to build momentum!"
+          <p className="text-white text-base leading-relaxed font-bold tracking-tight">
+            "You have {taskStats.study + taskStats.work} priority tasks today. Start with a 15-min deep focus session to build instant momentum!"
           </p>
           <button 
             onClick={onPlanMyDay}
-            className="w-full py-3 px-4 bg-white text-indigo-600 dark:text-zinc-900 font-bold rounded-2xl text-sm transition-transform active:scale-[0.98] shadow-lg"
+            className="w-full py-4 px-4 bg-white text-accent font-black uppercase tracking-widest rounded-2xl text-xs transition-all active:translate-y-1 active:shadow-none hover:shadow-xl shadow-lg"
           >
             {t('plan_my_day')}
           </button>
@@ -179,9 +186,12 @@ export default function Dashboard({
       </section>
 
       {/* Task Categories Grid */}
-      <section className="space-y-4">
-        <h3 className="font-bold text-lg px-1">{t('tasks')}</h3>
-        <div className="grid grid-cols-2 gap-4">
+      <section className="space-y-6">
+        <div className="flex items-center justify-between px-2">
+          <h3 className="font-black text-lg tracking-tight">{t('tasks')}</h3>
+          <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Select Category</span>
+        </div>
+        <div className="grid grid-cols-2 gap-5">
           {[
             { id: 'study', label: 'Study', icon: BookOpen, count: taskStats.study, color: 'text-indigo-400', bg: 'bg-indigo-400/10' },
             { id: 'work', label: 'Work', icon: Zap, count: taskStats.work, color: 'text-amber-400', bg: 'bg-amber-400/10' },
@@ -191,14 +201,14 @@ export default function Dashboard({
             <motion.div 
               key={cat.label}
               whileTap={{ scale: 0.98 }}
-              className="bg-white dark:bg-zinc-800/40 border border-zinc-200 dark:border-white/5 p-4 rounded-3xl flex flex-col gap-3 group hover:border-indigo-500 transition-all shadow-sm active:shadow-none"
+              className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 p-6 rounded-[2.5rem] flex flex-col gap-4 group hover:border-accent/40 shadow-sm transition-all duration-300"
             >
-              <div className={`w-10 h-10 rounded-xl ${cat.bg} flex items-center justify-center`}>
-                <cat.icon className={`w-5 h-5 ${cat.color}`} />
+              <div className={`w-12 h-12 rounded-2xl ${cat.bg} flex items-center justify-center border border-current opacity-70 group-hover:opacity-100 transition-opacity`}>
+                <cat.icon className={`w-6 h-6 ${cat.color}`} />
               </div>
               <div>
-                <p className="font-bold text-zinc-900 dark:text-zinc-100">{cat.label}</p>
-                <p className="text-xs text-zinc-500">{cat.count} tasks today</p>
+                <p className="font-black text-zinc-900 dark:text-zinc-100 text-lg tracking-tight">{cat.label}</p>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">{cat.count} tasks today</p>
               </div>
             </motion.div>
           ))}
@@ -206,21 +216,25 @@ export default function Dashboard({
       </section>
 
       {/* Mood Quick Access */}
-      <section className="bg-white dark:bg-zinc-800/40 border border-zinc-200 dark:border-white/5 p-6 rounded-[2.5rem] space-y-5 shadow-sm">
-        <h3 className="font-bold text-xs text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.2em]">{t('mood_question')}</h3>
-        <div className="flex justify-between items-center px-2">
+      <section className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 p-8 rounded-[3rem] space-y-6 shadow-sm">
+        <h3 className="font-black text-[10px] text-zinc-400 uppercase tracking-[0.25em] text-center">{t('mood_question')}</h3>
+        <div className="flex justify-between items-center gap-2">
           {moodIcons.map((m, idx) => (
             <button 
               key={idx} 
-              onClick={() => onMoodSelect?.(m.id)}
+              onClick={() => {
+                audioService.playClick();
+                hapticService.light();
+                onMoodSelect?.(m.id);
+              }}
               className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-95 shadow-sm",
+                "w-12 h-12 rounded-[1.25rem] flex items-center justify-center transition-all active:scale-90 hover:scale-110",
                 userMood === m.id 
-                  ? "bg-indigo-500 text-white shadow-indigo-500/20" 
+                  ? "bg-accent text-white shadow-xl shadow-accent/30 border-b-4 border-accent/70 -translate-y-1" 
                   : "bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-white/5"
               )}
             >
-              <m.icon className={cn("w-6 h-6", userMood === m.id ? "text-white" : m.color)} />
+              <m.icon className={cn("w-6 h-6 transition-colors", userMood === m.id ? "text-white" : m.color)} />
             </button>
           ))}
         </div>
@@ -228,21 +242,27 @@ export default function Dashboard({
 
       {/* Focus Mode Quick Link */}
       <section 
-        onClick={onOpenFocus}
-        className="bg-indigo-500 dark:bg-indigo-500/10 border border-indigo-500/20 p-6 rounded-[2.5rem] flex items-center justify-between group active:scale-[0.98] transition-all cursor-pointer shadow-xl shadow-indigo-500/20"
+        onClick={() => {
+          audioService.playPop();
+          hapticService.medium();
+          onOpenFocus();
+        }}
+        className="relative overflow-hidden bg-zinc-900 dark:bg-accent border-b-8 border-black/20 p-8 rounded-[3rem] flex items-center justify-between group active:translate-y-1 active:border-b-0 transition-all cursor-pointer shadow-2xl shadow-zinc-900/20"
       >
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-white dark:bg-indigo-500 flex items-center justify-center text-indigo-500 dark:text-white shadow-lg">
-            <Zap className="w-6 h-6 fill-current" />
+        <div className="flex items-center gap-5 relative z-10">
+          <div className="w-14 h-14 rounded-2xl bg-white dark:bg-white/20 flex items-center justify-center text-zinc-900 dark:text-white shadow-xl">
+            <Zap className="w-8 h-8 fill-current" />
           </div>
           <div>
-            <h3 className="font-bold text-white text-lg">{t('focus')}</h3>
-            <p className="text-xs text-indigo-100 dark:text-indigo-300 font-medium tracking-wide">Enter deep work mode</p>
+            <h3 className="font-black text-white text-xl tracking-tight leading-none mb-2">{t('focus')}</h3>
+            <p className="text-[10px] text-white/50 font-black uppercase tracking-widest">Enter deep work mode</p>
           </div>
         </div>
-        <div className="w-10 h-10 rounded-full bg-white/20 dark:bg-indigo-500/10 flex items-center justify-center text-white dark:text-indigo-400 group-hover:translate-x-1 transition-transform">
-          <ChevronRight />
+        <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-white group-hover:translate-x-2 transition-transform relative z-10">
+          <ChevronRight size={28} strokeWidth={3} />
         </div>
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl pointer-events-none" />
       </section>
     </div>
   );

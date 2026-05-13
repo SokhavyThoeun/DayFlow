@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
+import { MotionConfig } from 'motion/react';
 import './i18n';
 
 // Components
@@ -21,6 +22,10 @@ import FocusMode from './components/FocusMode';
 import NotificationToast from './components/NotificationToast';
 import Auth from './components/Auth';
 import { Task } from './types';
+
+// Utils
+import { audioService } from './lib/audio';
+import { hapticService } from './lib/haptics';
 
 // Firebase
 import { auth, db } from './lib/firebase';
@@ -39,10 +44,21 @@ export default function App() {
   const [habits, setHabits] = useState<any[]>([]);
   
   // Notification State
-  const [activeNotification, setActiveNotification] = useState<{ id: string, title: string, message: string, type: 'upcoming' | 'late' } | null>(null);
+  const [activeNotification, setActiveNotification] = useState<{ id: string, title: string, message: string, type: 'upcoming' | 'late' | 'motivation' } | null>(null);
   const [notifiedTaskIds, setNotifiedTaskIds] = useState<Set<string>>(new Set());
+  const [hasShownMotivation, setHasShownMotivation] = useState(false);
 
-  // Handle Theme Application
+  const motivationalQuotes = [
+    { title: "Dream Big", message: "The only limit to our realization of tomorrow is our doubts of today." },
+    { title: "Stay Focused", message: "Focus on being productive instead of busy." },
+    { title: "Keep Going", message: "It does not matter how slowly you go as long as you do not stop." },
+    { title: "Greatness Awaits", message: "Success is not final; failure is not fatal: It is the courage to continue that counts." },
+    { title: "Believe in You", message: "Whether you think you can or you think you can't, you're right." },
+    { title: "Master Your Day", message: "How you spend your days is how you spend your life." },
+    { title: "Peak Flow", message: "Your work is going to fill a large part of your life. Do great work!" }
+  ];
+
+  // Handle Theme and Accent Application
   useEffect(() => {
     document.documentElement.classList.remove('dark', 'amoled');
     if (theme === 'dark') {
@@ -52,6 +68,21 @@ export default function App() {
     }
     localStorage.setItem('dayflow_theme', theme);
   }, [theme]);
+
+  // Apply Accent Color
+  useEffect(() => {
+    if (settings?.accentColor) {
+      document.documentElement.style.setProperty('--accent-color', settings.accentColor);
+      
+      // Convert hex to RGB for opacity supporting shadows if needed
+      // Simple hex to rgb conversion
+      const hex = settings.accentColor.replace('#', '');
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      document.documentElement.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+    }
+  }, [settings?.accentColor]);
 
   useEffect(() => {
     // Auth Listener
@@ -83,6 +114,7 @@ export default function App() {
             userId: fbUser.uid,
             language: i18n.language || 'en',
             theme: 'dark',
+            accentColor: '#6366f1', // Classic Indigo
             soundEnabled: true,
             hapticEnabled: true,
             animationsEnabled: true,
@@ -159,6 +191,35 @@ export default function App() {
     };
   }, [user]);
 
+  // Sync Services with Settings & Show Motivation
+  useEffect(() => {
+    if (settings) {
+      audioService.setEnabled(settings.soundEnabled ?? true);
+      hapticService.setEnabled(settings.hapticEnabled ?? true);
+
+      // Show daily motivation once per session
+      if (settings.notifications?.dailyMotivation && !hasShownMotivation && !isLoading) {
+        const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
+        
+        // Short delay for better UX after login/load
+        const timer = setTimeout(() => {
+          setActiveNotification({
+            id: 'daily-motivation',
+            title: randomQuote.title,
+            message: randomQuote.message,
+            type: 'motivation'
+          });
+          setHasShownMotivation(true);
+          
+          // Motivation hides faster (5s)
+          setTimeout(() => setActiveNotification(null), 5000);
+        }, 1500);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [settings, hasShownMotivation, isLoading]);
+
   // Update Settings in Firestore
   const updateSettings = async (updatedData: any) => {
     if (!user) return;
@@ -172,11 +233,14 @@ export default function App() {
 
   // Notification Checker
   useEffect(() => {
-    if (!user || tasks.length === 0 || !settings?.notifications?.push) return;
+    if (!user || (tasks.length === 0 && habits.length === 0) || !settings?.notifications?.push) return;
 
     const checkInterval = setInterval(() => {
       const now = new Date();
+      // Local YYYY-MM-DD string
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       
+      // Check Tasks
       tasks.forEach(task => {
         if (task.isCompleted || !task.deadline) return;
         
@@ -186,6 +250,8 @@ export default function App() {
 
         // Upcoming: 5 minutes before
         if (minutesDiff <= 5 && minutesDiff > 0 && !notifiedTaskIds.has(`${task.id}-upcoming`)) {
+          audioService.playPop();
+          hapticService.medium();
           setActiveNotification({
             id: task.id,
             title: task.title,
@@ -193,23 +259,69 @@ export default function App() {
             type: 'upcoming'
           });
           setNotifiedTaskIds(prev => new Set(prev).add(`${task.id}-upcoming`));
+          setTimeout(() => setActiveNotification(null), 8000);
         }
         
         // Late: after deadline
         if (minutesDiff < 0 && !notifiedTaskIds.has(`${task.id}-late`)) {
+          audioService.playError();
+          hapticService.heavy();
           setActiveNotification({
             id: task.id,
             title: task.title,
-            message: `You're running behind! Let's get focus mode started.`,
+            message: `Overdue alert! This task missed its planned time.`,
             type: 'late'
           });
           setNotifiedTaskIds(prev => new Set(prev).add(`${task.id}-late`));
+          setTimeout(() => setActiveNotification(null), 8000);
+        }
+      });
+
+      // Check Habits
+      habits.forEach(habit => {
+        if (!habit.time || habit.history?.includes(todayStr)) return;
+
+        const [hours, minutes] = habit.time.split(':').map(Number);
+        const habitTimeToday = new Date();
+        habitTimeToday.setHours(hours, minutes, 0, 0);
+
+        const timeDiff = habitTimeToday.getTime() - now.getTime();
+        const minutesDiff = Math.floor(timeDiff / (1000 * 60));
+
+        // Upcoming Habit: 5-10 minutes before
+        const upcomingKey = `${habit.id}-upcoming-${todayStr}-${habit.time}`;
+        if (minutesDiff <= 5 && minutesDiff > 0 && !notifiedTaskIds.has(upcomingKey)) {
+          audioService.playPop();
+          hapticService.medium();
+          setActiveNotification({
+            id: habit.id,
+            title: habit.title,
+            message: `Almost due! Time for your daily habit: ${habit.title}`,
+            type: 'upcoming'
+          });
+          setNotifiedTaskIds(prev => new Set(prev).add(upcomingKey));
+          setTimeout(() => setActiveNotification(null), 8000);
+        }
+
+        // Late Habit: immediately after scheduled time if not done
+        const lateKey = `${habit.id}-late-${todayStr}-${habit.time}`;
+        if (minutesDiff < 0 && minutesDiff > -60 && !notifiedTaskIds.has(lateKey)) {
+          audioService.playError();
+          hapticService.heavy();
+          setActiveNotification({
+            id: habit.id,
+            title: habit.title,
+            message: `Overdue! Don't forget your habit: ${habit.title}`,
+            type: 'late'
+          });
+          setNotifiedTaskIds(prev => new Set(prev).add(lateKey));
+          setTimeout(() => setActiveNotification(null), 8000);
         }
       });
     }, 10000); // Check every 10 seconds
 
     return () => clearInterval(checkInterval);
-  }, [user, tasks, notifiedTaskIds]);
+  }, [user, tasks, habits, notifiedTaskIds, settings]);
 
   const handleAddTask = async (task: Partial<Task>) => {
     try {
@@ -372,9 +484,10 @@ export default function App() {
             level: Math.floor(totalXP / 500) + 1,
             progress: todaysProgress
           }} 
+          habits={habits}
         />
       );
-      case 'assistant': return <Assistant onAddTask={handleAddTask} />;
+      case 'assistant': return <Assistant user={user} onAddTask={handleAddTask} />;
       case 'mood': return <MoodTracker />;
       case 'settings': return (
         <Settings 
@@ -385,6 +498,7 @@ export default function App() {
           onUpdateSettings={updateSettings}
           theme={theme}
           onToggleTheme={toggleTheme}
+          productivityScore={totalXP}
         />
       );
       default: return <Dashboard onOpenFocus={openFocusMode} onOpenSettings={openSettings} userName={user.name} onPlanMyDay={() => goToAssistantWithPrompt(t('plan_my_day'))} />;
@@ -392,38 +506,40 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 flex flex-col pb-24 font-sans selection:bg-indigo-500/30 transition-colors duration-300">
-      {/* Notifications */}
-      <NotificationToast 
-        show={!!activeNotification}
-        onClose={() => setActiveNotification(null)}
-        title={activeNotification?.title || ''}
-        message={activeNotification?.message || ''}
-        type={activeNotification?.type || 'upcoming'}
-      />
+    <MotionConfig transition={settings?.animationsEnabled === false ? { duration: 0 } : undefined}>
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 flex flex-col pb-24 font-sans selection:bg-indigo-500/30 transition-colors duration-300">
+        {/* Notifications */}
+        <NotificationToast 
+          show={!!activeNotification}
+          onClose={() => setActiveNotification(null)}
+          title={activeNotification?.title || ''}
+          message={activeNotification?.message || ''}
+          type={activeNotification?.type || 'upcoming'}
+        />
 
-      {/* Scrollable Area */}
-      <main className="flex-1 w-full max-w-md mx-auto px-5 pt-8 overflow-x-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-          >
-            {renderContent()}
-          </motion.div>
+        {/* Scrollable Area */}
+        <main className="flex-1 w-full max-w-md mx-auto px-5 pt-8 overflow-x-hidden">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              {renderContent()}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+
+        {/* Overlays */}
+        <AnimatePresence>
+          {showFocusMode && <FocusMode onClose={closeFocusMode} />}
         </AnimatePresence>
-      </main>
 
-      {/* Overlays */}
-      <AnimatePresence>
-        {showFocusMode && <FocusMode onClose={closeFocusMode} />}
-      </AnimatePresence>
-
-      {/* Navigation */}
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
-    </div>
+        {/* Navigation */}
+        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      </div>
+    </MotionConfig>
   );
 }

@@ -55,7 +55,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidTask(incoming());
-      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidTask(incoming()) && (
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && (
         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'deadline', 'isCompleted'])
       );
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
@@ -72,8 +72,8 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidHabit(incoming());
-      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidHabit(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'icon', 'streak', 'history'])
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'icon', 'streak', 'history', 'time'])
       );
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
@@ -95,6 +95,21 @@ service cloud.firestore {
     // Settings Rules
     match /users/{userId}/settings/{settingId} {
       allow read, write: if isOwner(userId);
+    }
+
+    // Chat Message Rules (Subcollection for better performance and security)
+    match /users/{userId}/messages/{messageId} {
+      function isValidChatMessage(data) {
+        return data.keys().hasAll(['text', 'sender', 'timestamp']) &&
+               data.text is string && data.text.size() > 0 && data.text.size() <= 4096 &&
+               data.sender in ['user', 'ai'] &&
+               data.timestamp is string;
+      }
+
+      allow list, get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidChatMessage(incoming());
+      allow delete: if isOwner(userId);
+      allow update: if false; 
     }
   }
 }
