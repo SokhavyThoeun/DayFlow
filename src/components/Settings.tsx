@@ -8,7 +8,7 @@ import {
   Sun, Wand2, Brain, Bot, Rocket, Users, 
   Calendar, Quote, Zap, Clock, Droplets, BookOpen, 
   Shield, Timer, Lock, RefreshCw, Smartphone as DeviceIcon,
-  Languages, Info, Star, CreditCard, Eye, EyeOff, AlertTriangle, Flag
+  Languages, Info, Star, CreditCard, Eye, EyeOff, AlertTriangle, Flag, Camera, X, ImageIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
@@ -99,6 +99,90 @@ export default function Settings({
   const [searchQuery, setSearchQuery] = useState('');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user', width: { ideal: 1024 }, height: { ideal: 1024 } } 
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      setMessage({ text: "Could not access camera. Please check permissions.", type: 'error' });
+      handleCloseSubMenu();
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      
+      const size = Math.min(video.videoWidth, video.videoHeight);
+      canvas.width = 512;
+      canvas.height = 512;
+      
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const xOffset = (video.videoWidth - size) / 2;
+        const yOffset = (video.videoHeight - size) / 2;
+        ctx.drawImage(video, xOffset, yOffset, size, size, 0, 0, 512, 512);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        onUpdateUser({ avatar: dataUrl });
+        stopCamera();
+        handleCloseSubMenu();
+        setMessage({ text: 'Profile photo updated!', type: 'success' });
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubMenu === 'profile_camera') {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    return () => stopCamera();
+  }, [activeSubMenu]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ text: 'Image is too large. Max 2MB allowed.', type: 'error' });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64String = reader.result as string;
+        await onUpdateUser({ avatar: base64String });
+        setMessage({ text: 'Profile picture updated!', type: 'success' });
+        setIsProcessing(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setMessage({ text: 'Error uploading image: ' + err.message, type: 'error' });
+      setIsProcessing(false);
+    }
+  };
 
   // Productivity values
   const [pomoWork, setPomoWork] = useState(settings?.productivity?.pomoWork || 25);
@@ -830,6 +914,219 @@ export default function Settings({
     );
   }
 
+  if (activeSubMenu === 'support_help') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Help Center</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Frequently Asked Questions</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {[
+            { q: "How do I create a task?", a: "Go to the Planner section and tap the plus button at the bottom. Fill in the title, date, and category." },
+            { q: "What is Focus Mode?", a: "Focus Mode uses the Pomodoro technique to help you stay productive. It blocks distractions and tracks your deep work time." },
+            { q: "Can I sync across devices?", a: "Yes! Simply log in with the same Google or Magic Link account on any device to keep your data in sync." },
+            { q: "How does the AI Assistant work?", a: "Our AI helps you organize your schedule, suggests task priorities, and provides motivational tips based on your productivity patterns." }
+          ].map((item, i) => (
+            <div key={i} className="p-6 bg-white dark:bg-zinc-900 border-b-4 border-zinc-100 dark:border-zinc-800 rounded-3xl shadow-sm">
+              <h3 className="text-sm font-black text-zinc-900 dark:text-white mb-2">{item.q}</h3>
+              <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400 leading-relaxed">{item.a}</p>
+            </div>
+          ))}
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
+        >
+          Got it
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'support_bug') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Report a Bug</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Help us improve DayFlow</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="p-6 bg-amber-50 dark:bg-amber-500/10 border-b-4 border-amber-200 dark:border-amber-500/20 rounded-3xl flex items-start gap-4">
+            <AlertTriangle className="text-amber-500 flex-shrink-0" size={24} />
+            <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest leading-loose">
+              If you found a critical security issue, please contact our security team directly at safety@dayflow.app.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-400 px-4">Description</label>
+            <textarea 
+              placeholder="What happened? Steps to reproduce..."
+              className="w-full p-6 bg-white dark:bg-zinc-900 border-b-4 border-zinc-100 dark:border-zinc-800 rounded-[2rem] text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none min-h-[200px] shadow-sm resize-none"
+            />
+          </div>
+        </div>
+
+        <button 
+          onClick={() => {
+            handleCloseSubMenu();
+            setMessage({ text: 'Bug report submitted! Thank you for helping us.', type: 'success' });
+          }}
+          className="w-full mt-10 p-4 h-16 bg-blue-500 text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-blue-600 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-blue-500/20 sticky bottom-8"
+        >
+          Submit Report
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'support_about') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">About DayFlow</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Platform Details</p>
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center text-center space-y-6">
+          <div className="w-24 h-24 rounded-[2rem] bg-accent flex items-center justify-center text-white shadow-2xl shadow-accent/30 mb-4">
+            <Zap size={48} strokeWidth={2.5} />
+          </div>
+          
+          <div>
+            <h2 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">DayFlow</h2>
+            <p className="text-sm font-bold text-accent uppercase tracking-[0.2em] mt-1">Version 2.4.0 (Gold)</p>
+          </div>
+
+          <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 max-w-sm leading-relaxed">
+            DayFlow is a next-generation productivity suite designed for those who value time, discipline, and aesthetic clarity. Built with precision and powered by AI.
+          </p>
+
+          <div className="w-full space-y-3">
+            {[
+              { label: "Engine", value: "Vite + React" },
+              { label: "Storage", value: "Firebase Firestore" },
+              { label: "Runtime", value: "Node.js 20+" },
+              { label: "Developer", value: "DayFlow Team" }
+            ].map((stat, i) => (
+              <div key={i} className="flex items-center justify-between p-5 bg-white dark:bg-zinc-900 border-b-4 border-zinc-100 dark:border-zinc-800 rounded-2xl">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">{stat.label}</span>
+                <span className="text-xs font-black text-zinc-900 dark:text-white">{stat.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-zinc-800 dark:border-zinc-200 active:translate-y-2 active:border-b-0 transition-all shadow-xl sticky bottom-8"
+        >
+          Close
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'profile_camera') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100] flex flex-col bg-black overflow-hidden"
+      >
+        <div className="flex items-center justify-between p-6 relative z-10 bg-gradient-to-b from-black/60 to-transparent">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-xl flex items-center justify-center text-white active:scale-90 transition-all"
+          >
+            <X size={24} />
+          </button>
+          <div className="text-center">
+            <h1 className="text-lg font-black text-white tracking-tight">Shoot your shot</h1>
+            <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mt-0.5">Profile Photo Mode</p>
+          </div>
+          <div className="w-12" />
+        </div>
+
+        <div className="flex-1 flex items-center justify-center relative">
+          <div className="w-full aspect-square max-w-md mx-4 relative rounded-[3rem] overflow-hidden border-4 border-white/20 shadow-2xl">
+            <video 
+              ref={videoRef}
+              autoPlay 
+              playsInline 
+              muted
+              className="w-full h-full object-cover -scale-x-100"
+            />
+            {/* Guide overlay */}
+            <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none rounded-[3rem]" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-[85%] h-[85%] border-2 border-white/30 border-dashed rounded-full" />
+            </div>
+          </div>
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+
+        <div className="pb-20 pt-10 flex flex-col items-center gap-8 relative z-10 bg-gradient-to-t from-black to-transparent">
+          <motion.button 
+            whileTap={{ scale: 0.85 }}
+            onClick={capturePhoto}
+            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center p-1.5 group"
+          >
+            <div className="w-full h-full rounded-full bg-white group-active:bg-zinc-200 transition-colors shadow-inner" />
+          </motion.button>
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-[10px] font-black text-white/60 uppercase tracking-[0.3em]">Tap to capture</p>
+            <div className="w-8 h-1 bg-accent rounded-full animate-pulse" />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   if (activeSubMenu === 'security_2fa') {
     return (
       <motion.div 
@@ -1061,17 +1358,50 @@ export default function Settings({
         
         <div className="relative group">
           <div className="absolute -inset-1 bg-accent rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200" />
-          <img 
-            src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id}`} 
-            className="relative w-28 h-28 rounded-full border-4 border-white dark:border-zinc-900 shadow-2xl object-cover transition-transform group-hover:scale-105"
-            alt="Profile"
+          <div className="relative">
+            <img 
+              src={user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id}`} 
+              className="w-28 h-28 rounded-full border-4 border-white dark:border-zinc-900 shadow-2xl object-cover transition-transform group-hover:scale-105"
+              alt="Profile"
+            />
+            {isProcessing && (
+              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                <RefreshCw className="animate-spin text-white" size={24} />
+              </div>
+            )}
+          </div>
+          
+          <input 
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageUpload}
+            accept="image/*"
+            className="hidden"
           />
-          <button 
-            onClick={() => onUpdateUser({ avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random().toString(36).substring(7)}` })}
-            className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:brightness-110"
-          >
-            <Palette size={14} />
-          </button>
+
+          <div className="absolute -bottom-2 right-0 flex gap-1">
+            <button 
+              onClick={() => onUpdateUser({ avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${Math.random().toString(36).substring(7)}` })}
+              className="w-9 h-9 rounded-full bg-white dark:bg-zinc-800 text-zinc-400 flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:brightness-110 border border-zinc-100 dark:border-zinc-700"
+              title="Randomize"
+            >
+              <Palette size={16} />
+            </button>
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="w-9 h-9 rounded-full bg-white dark:bg-zinc-800 text-zinc-400 flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:brightness-110 border border-zinc-100 dark:border-zinc-700"
+              title="Upload Photo"
+            >
+              <ImageIcon size={16} />
+            </button>
+            <button 
+              onClick={() => handleOpenSubMenu('profile_camera')}
+              className="w-9 h-9 rounded-full bg-accent text-white flex items-center justify-center shadow-lg active:scale-90 transition-transform hover:brightness-110"
+              title="Take Photo"
+            >
+              <Camera size={16} />
+            </button>
+          </div>
         </div>
 
         <h1 className="mt-6 text-2xl font-black text-zinc-900 dark:text-white tracking-tight">{user?.name || 'Explorer'}</h1>
@@ -1372,17 +1702,33 @@ export default function Settings({
       </div>
 
       {/* SUPPORT */}
-      <SectionTitle>{t('settings_support')}</SectionTitle>
+      <SectionTitle>Support & Community</SectionTitle>
       <div className="flex flex-col gap-1">
-        <SettingRow icon={HelpCircle} label="Help Center" color="zinc" />
-        <SettingRow icon={Bug} label="Report a Bug" color="zinc" />
+        <SettingRow 
+          icon={HelpCircle} 
+          label="Help Center" 
+          color="zinc" 
+          onClick={() => handleOpenSubMenu('support_help')}
+        />
+        <SettingRow 
+          icon={Bug} 
+          label="Report a Bug" 
+          color="zinc" 
+          onClick={() => handleOpenSubMenu('support_bug')}
+        />
         <SettingRow 
           icon={FileText} 
           label="Terms & Privacy" 
           color="zinc" 
           onClick={() => handleOpenSubMenu('privacy_terms')}
         />
-        <SettingRow icon={Info} label="About DayFlow" value="Version 2.4.0 (Gold)" color="zinc" />
+        <SettingRow 
+          icon={Info} 
+          label="About DayFlow" 
+          value="Version 2.4.0 (Gold)" 
+          color="zinc" 
+          onClick={() => handleOpenSubMenu('support_about')}
+        />
       </div>
 
       {/* LOGOUT */}

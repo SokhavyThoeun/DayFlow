@@ -1,11 +1,10 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { audioService } from '../lib/audio';
 import { hapticService } from '../lib/haptics';
 import { Sparkles, TrendingUp, Zap, Target, BookOpen, ChevronRight, Sun, Frown, Meh, Smile, Heart, Clock, CheckCircle2, Circle, X, Edit2, Trash2, MapPin, AlignLeft, AlertTriangle, Droplets } from 'lucide-react';
 import { formatDate, cn } from '../lib/utils';
-import { HOLIDAYS, QUOTES } from '../constants/localizedData';
 import { Task, TaskCategory, TaskPriority } from '../types';
 import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
