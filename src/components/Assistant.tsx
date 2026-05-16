@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Send, Sparkles, User, Bot, Loader2, ArrowRight, Plus, Calendar, Clock, Check, History, Trash2 } from 'lucide-react';
+import { Send, Sparkles, User, Bot, Loader2, ArrowRight, Plus, Calendar, Clock, Check, History, Trash2, BookOpen, Zap, Heart, Target } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { cn } from '../lib/utils';
@@ -21,6 +21,7 @@ interface TaskSuggestionCardProps {
 
 const TaskSuggestionCard: React.FC<TaskSuggestionCardProps> = ({ suggestion, onAddTask }) => {
   const [added, setAdded] = useState(false);
+  const { t } = useTranslation();
 
   const handleAdd = () => {
     onAddTask?.({
@@ -32,13 +33,31 @@ const TaskSuggestionCard: React.FC<TaskSuggestionCardProps> = ({ suggestion, onA
     setAdded(true);
   };
 
+  const getCategoryIcon = (cat: string) => {
+    switch (cat.toLowerCase()) {
+      case 'study': return BookOpen;
+      case 'work': return Zap;
+      case 'health': return Heart;
+      case 'life': return Target;
+      default: return Target;
+    }
+  };
+
+  const CategoryIcon = getCategoryIcon(suggestion.category);
+
   return (
     <div className="bg-white/10 p-3 rounded-2xl border border-white/10 space-y-2 group">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest bg-indigo-500/20 px-2 py-0.5 rounded-lg flex items-center gap-1">
-          <Clock size={10} />
-          {suggestion.time}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest bg-indigo-500/20 px-2 py-0.5 rounded-lg flex items-center gap-1">
+            <Clock size={10} />
+            {suggestion.time}
+          </span>
+          <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded-lg flex items-center gap-1">
+            <CategoryIcon size={10} />
+            {t(`cat_${suggestion.category.toLowerCase()}`)}
+          </span>
+        </div>
         <button 
           disabled={added}
           onClick={handleAdd}
@@ -299,20 +318,6 @@ export default function Assistant({ user, onAddTask }: AssistantProps) {
 
       {/* Input Area */}
       <div className="mt-4 space-y-4">
-        {/* Suggestion Chips */}
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          {suggestions.map((s, idx) => (
-            <button 
-              key={`suggest-${idx}`}
-              onClick={() => handleSend(s.label)}
-              className="whitespace-nowrap px-4 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/5 rounded-full text-xs font-bold text-zinc-400 dark:text-zinc-500 hover:text-indigo-500 dark:hover:text-white transition-colors flex items-center gap-2 shadow-sm"
-            >
-              {s.label}
-              <s.icon className="w-3 h-3" />
-            </button>
-          ))}
-        </div>
-
         <div className="relative">
           <input 
             type="text"

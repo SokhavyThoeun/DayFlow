@@ -8,13 +8,14 @@ import {
   Sun, Wand2, Brain, Bot, Rocket, Users, 
   Calendar, Quote, Zap, Clock, Droplets, BookOpen, 
   Shield, Timer, Lock, RefreshCw, Smartphone as DeviceIcon,
-  Languages, Info, Star, CreditCard, Eye, EyeOff, AlertTriangle
+  Languages, Info, Star, CreditCard, Eye, EyeOff, AlertTriangle, Flag
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, db } from '../lib/firebase';
 import { useTranslation } from 'react-i18next';
 import { audioService } from '../lib/audio';
 import { hapticService } from '../lib/haptics';
+import { HOLIDAYS, QUOTES } from '../constants/localizedData';
 import { 
   sendEmailVerification, 
   updatePassword, 
@@ -34,7 +35,8 @@ interface SettingsProps {
   onLogout: () => void;
   theme: 'light' | 'dark' | 'amoled';
   onToggleTheme: () => void;
-  productivityScore?: number;
+  totalXP?: number;
+  level?: number;
 }
 
 export default function Settings({ 
@@ -45,16 +47,74 @@ export default function Settings({
   onLogout, 
   theme, 
   onToggleTheme,
-  productivityScore = 0
+  totalXP = 0,
+  level = 1
 }: SettingsProps) {
   const { t, i18n } = useTranslation();
-  const [activeSection, setActiveSection] = useState<string | null>(null);
   const [activeSubMenu, setActiveSubMenu] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
+  const lastScrollPos = React.useRef(0);
+
+  const handleOpenSubMenu = (menu: string) => {
+    lastScrollPos.current = window.scrollY;
+    setActiveSubMenu(menu);
+    // Use a small timeout to ensure the state has updated and content has rendered before scrolling
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }, 10);
+  };
+
+  const handleCloseSubMenu = () => {
+    setActiveSubMenu(null);
+    if (lastScrollPos.current > 0) {
+      const restore = () => {
+        if (lastScrollPos.current > 0) {
+          window.scrollTo({ top: lastScrollPos.current, behavior: 'instant' });
+        }
+      };
+      
+      // Attempt restoration at multiple intervals to ensure layout completion
+      setTimeout(restore, 0);
+      setTimeout(restore, 50);
+      setTimeout(restore, 100);
+    }
+  };
+
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const handleCloseProfile = () => {
+    setIsEditingProfile(false);
+    if (lastScrollPos.current > 0) {
+      const restore = () => {
+        if (lastScrollPos.current > 0) {
+          window.scrollTo({ top: lastScrollPos.current, behavior: 'instant' });
+        }
+      };
+      setTimeout(restore, 0);
+      setTimeout(restore, 50);
+      setTimeout(restore, 100);
+    }
+  };
+
   const [editName, setEditName] = useState(user?.name || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Productivity values
+  const [pomoWork, setPomoWork] = useState(settings?.productivity?.pomoWork || 25);
+  const [pomoBreak, setPomoBreak] = useState(settings?.productivity?.pomoBreak || 5);
+  const [waterTarget, setWaterTarget] = useState(settings?.productivity?.waterTarget || 8);
+
+  useEffect(() => {
+    if (settings?.productivity) {
+      setPomoWork(settings.productivity.pomoWork || 25);
+      setPomoBreak(settings.productivity.pomoBreak || 5);
+      setWaterTarget(settings.productivity.waterTarget || 8);
+    }
+  }, [settings?.productivity]);
+
+  const levelProgress = Math.round(((totalXP % 500) / 500) * 100);
+
 
   // Password Update State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -64,7 +124,7 @@ export default function Settings({
 
   // Default values while loading
   const currentSettings = settings || {
-    notifications: { push: true, taskReminders: true, dailyMotivation: true, studyReminders: true, aiAssistant: true },
+    notifications: { push: true, taskReminders: true, dailyMotivation: true, studyReminders: true, aiAssistant: true, aiAutoSchedules: true },
     soundEnabled: true,
     hapticEnabled: true,
     animationsEnabled: true,
@@ -148,7 +208,7 @@ export default function Settings({
       setMessage({ text: 'Password updated successfully!', type: 'success' });
       setCurrentPassword('');
       setNewPassword('');
-      setActiveSubMenu(null);
+      handleCloseSubMenu();
     } catch (err: any) {
       setMessage({ text: err.message, type: 'error' });
     } finally {
@@ -182,6 +242,15 @@ export default function Settings({
     onUpdateSettings({
       [category]: {
         ...(currentSettings[category] || {}),
+        [key]: value
+      }
+    });
+  };
+
+  const handleProductivityUpdate = (key: string, value: any) => {
+    onUpdateSettings({
+      productivity: {
+        ...(currentSettings.productivity || {}),
         [key]: value
       }
     });
@@ -231,14 +300,16 @@ export default function Settings({
     <div 
       onClick={(e) => { e.stopPropagation(); onToggle(); }}
       className={cn(
-        "w-12 h-7 rounded-full transition-all duration-500 relative cursor-pointer border-b-4",
-        active ? "bg-accent border-accent/80 shadow-lg shadow-accent/20" : "bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-900"
+        "w-11 h-6 rounded-full transition-colors duration-300 relative cursor-pointer",
+        active ? "bg-accent shadow-md shadow-accent/20" : "bg-zinc-200 dark:bg-zinc-800"
       )}
     >
-      <div className={cn(
-        "absolute top-0.5 left-0.5 w-4.5 h-4.5 rounded-full bg-white transition-all transform duration-300 shadow-md",
-        active ? "translate-x-5" : "translate-x-0"
-      )} />
+      <motion.div 
+        initial={false}
+        animate={{ x: active ? 20 : 0 }}
+        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+        className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-md"
+      />
     </div>
   );
 
@@ -261,7 +332,7 @@ export default function Settings({
       >
         <div className="flex items-center gap-4 mb-10">
           <button 
-            onClick={() => setActiveSubMenu(null)}
+            onClick={handleCloseSubMenu}
             className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
           >
             <ChevronRight className="rotate-180" />
@@ -353,7 +424,7 @@ export default function Settings({
       >
         <div className="flex items-center gap-4 mb-10">
           <button 
-            onClick={() => setActiveSubMenu(null)}
+            onClick={handleCloseSubMenu}
             className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
           >
             <ChevronRight className="rotate-180" />
@@ -427,7 +498,7 @@ export default function Settings({
       >
         <div className="flex items-center gap-4 mb-10">
           <button 
-            onClick={() => setActiveSubMenu(null)}
+            onClick={handleCloseSubMenu}
             className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
           >
             <ChevronRight className="rotate-180" />
@@ -486,7 +557,7 @@ export default function Settings({
         </div>
 
         <button 
-          onClick={() => setActiveSubMenu(null)}
+          onClick={handleCloseSubMenu}
           className="w-full p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
         >
           Sounds Good
@@ -514,7 +585,7 @@ export default function Settings({
       >
         <div className="flex items-center gap-4 mb-10">
           <button 
-            onClick={() => setActiveSubMenu(null)}
+            onClick={handleCloseSubMenu}
             className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
           >
             <ChevronRight className="rotate-180" />
@@ -570,7 +641,7 @@ export default function Settings({
         </div>
 
         <button 
-          onClick={() => setActiveSubMenu(null)}
+          onClick={handleCloseSubMenu}
           className="w-full p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
         >
           {t('continue') || 'Continue'}
@@ -579,6 +650,100 @@ export default function Settings({
     );
   }
 
+  if (activeSubMenu === 'productivity') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">{t('settings_productivity')}</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Optimize your workflow</p>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <div className="space-y-4">
+            <SectionTitle>Pomodoro Work (Mins)</SectionTitle>
+            <div className="flex items-center gap-4">
+               <input 
+                 type="range" min="1" max="60" 
+                 value={pomoWork}
+                 onChange={(e) => setPomoWork(parseInt(e.target.value))}
+                 onMouseUp={() => handleProductivityUpdate('pomoWork', pomoWork)}
+                 onTouchEnd={() => handleProductivityUpdate('pomoWork', pomoWork)}
+                 className="flex-1 accent-indigo-500 h-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+               />
+               <span className="w-12 text-lg font-black text-indigo-500">{pomoWork}</span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <SectionTitle>Pomodoro Break (Mins)</SectionTitle>
+            <div className="flex items-center gap-4">
+               <input 
+                 type="range" min="1" max="30" 
+                 value={pomoBreak}
+                 onChange={(e) => setPomoBreak(parseInt(e.target.value))}
+                 onMouseUp={() => handleProductivityUpdate('pomoBreak', pomoBreak)}
+                 onTouchEnd={() => handleProductivityUpdate('pomoBreak', pomoBreak)}
+                 className="flex-1 accent-indigo-500 h-2 bg-zinc-200 dark:bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+               />
+               <span className="w-12 text-lg font-black text-indigo-500">{pomoBreak}</span>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <SectionTitle>Water Target (Glasses)</SectionTitle>
+            <div className="flex items-center gap-4">
+               <button 
+                 onClick={() => {
+                   const val = Math.max(1, waterTarget - 1);
+                   setWaterTarget(val);
+                   handleProductivityUpdate('waterTarget', val);
+                 }}
+                 className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center font-black text-xl"
+               >-</button>
+               <div className="flex-1 text-center bg-zinc-50 dark:bg-zinc-800/50 py-4 rounded-3xl border-b-2 border-zinc-200 dark:border-zinc-700">
+                  <span className="text-2xl font-black text-blue-500">{waterTarget}</span>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-2">Glasses</span>
+               </div>
+               <button 
+                 onClick={() => {
+                   const val = Math.min(20, waterTarget + 1);
+                   setWaterTarget(val);
+                   handleProductivityUpdate('waterTarget', val);
+                 }}
+                 className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center font-black text-xl"
+               >+</button>
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <SettingRow icon={RefreshCw} label="Habit Reminders" color="emerald">
+              <Toggle active={currentSettings.notifications?.studyReminders} onToggle={() => handleNestedToggle('notifications', 'studyReminders', !currentSettings.notifications?.studyReminders)} />
+            </SettingRow>
+          </div>
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
+        >
+          {t('continue') || 'Continue'}
+        </button>
+      </motion.div>
+    );
+  }
   if (activeSubMenu === 'language') {
     const selectedLang = languages.find(l => l.code === i18n.language) || languages[0];
 
@@ -591,7 +756,7 @@ export default function Settings({
       >
         <div className="flex items-center gap-4 mb-10">
           <button 
-            onClick={() => setActiveSubMenu(null)}
+            onClick={handleCloseSubMenu}
             className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
           >
             <ChevronRight className="rotate-180" />
@@ -656,10 +821,229 @@ export default function Settings({
         </div>
 
         <button 
-          onClick={() => setActiveSubMenu(null)}
+          onClick={handleCloseSubMenu}
           className="w-full p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
         >
           {t('continue') || 'Continue'}
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'security_2fa') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Two-Factor Auth</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Extra layer of security</p>
+          </div>
+        </div>
+
+        <div className="p-8 bg-zinc-50 dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] mb-8 text-center">
+          <div className="w-16 h-16 rounded-3xl bg-blue-500/10 flex items-center justify-center mx-auto mb-6 text-blue-500">
+            <Lock size={32} />
+          </div>
+          <h3 className="text-lg font-black text-zinc-900 dark:text-white mb-2">Secure your account</h3>
+          <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest leading-loose max-w-xs mx-auto">
+            2FA adds an extra step to your login to ensure it's really you.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+           <SettingRow icon={Smartphone} label="Authenticator App" subtext="Use Google Authenticator" color="purple">
+              <Toggle active={currentSettings.security?.twoFactorEnabled} onToggle={() => handleNestedToggle('security', 'twoFactorEnabled', !currentSettings.security?.twoFactorEnabled)} />
+           </SettingRow>
+           <SettingRow icon={Mail} label="Email Codes" subtext="Verify via your email" color="blue">
+              <Toggle active={false} onToggle={() => {}} />
+           </SettingRow>
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
+        >
+          {t('continue') || 'Continue'}
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'privacy_terms') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Terms & Privacy</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Our commitment to you</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="p-8 bg-zinc-50 dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem]">
+            <div className="flex items-center gap-3 mb-4 text-emerald-500">
+              <ShieldCheck size={20} />
+              <h3 className="text-sm font-black uppercase tracking-widest">Privacy Policy</h3>
+            </div>
+            <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400 leading-loose">
+              We respect your privacy. DayFlow does not sell your personal data. Your tasks, habits, and profile information are used strictly to provide you with the best productivity experience.
+            </p>
+          </div>
+
+          <div className="p-8 bg-zinc-50 dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem]">
+            <div className="flex items-center gap-3 mb-4 text-blue-500">
+              <FileText size={20} />
+              <h3 className="text-sm font-black uppercase tracking-widest">Terms of Service</h3>
+            </div>
+            <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400 leading-loose">
+              By using DayFlow, you agree to focus on your goals and strive for consistent progress. We provide the tools, and you provide the determination!
+            </p>
+          </div>
+
+          <div className="p-8 bg-zinc-50 dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem]">
+            <div className="flex items-center gap-3 mb-4 text-amber-500">
+              <RefreshCw size={20} />
+              <h3 className="text-sm font-black uppercase tracking-widest">Data Portability</h3>
+            </div>
+            <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400 leading-loose">
+              Your data belongs to you. You can delete your data at any time from the account settings.
+            </p>
+          </div>
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
+        >
+          I Understand
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'khmer_holidays') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Holiday Calendar</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Local & International Events</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {HOLIDAYS.map((h, idx) => (
+            <div key={idx} className="p-5 bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-3xl flex items-center gap-5 shadow-sm">
+              <div className={cn(
+                "w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-[9px] leading-tight",
+                h.category === 'Khmer' ? "bg-rose-500 shadow-rose-500/20" : "bg-blue-500 shadow-blue-500/20"
+              )}>
+                <div className="text-center">
+                  {h.date.split('-')[1]}<br/>
+                  {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(h.date.split('-')[0]) - 1]}
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-black text-zinc-900 dark:text-white tracking-tight">
+                  {i18n.language === 'km' ? h.nameKh : h.nameEn}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                   <div className={cn("w-1.5 h-1.5 rounded-full", h.category === 'Khmer' ? "bg-rose-500" : "bg-blue-500")} />
+                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{h.category} Holiday</span>
+                </div>
+              </div>
+              {h.category === 'Khmer' && <div className="text-xl">🇰🇭</div>}
+              {h.category === 'International' && <Flag size={16} className="text-blue-500" />}
+            </div>
+          ))}
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
+        >
+          {t('continue') || 'Continue'}
+        </button>
+      </motion.div>
+    );
+  }
+
+  if (activeSubMenu === 'daily_quotes') {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        className="pb-32 max-w-2xl mx-auto px-6 pt-12"
+      >
+        <div className="flex items-center gap-4 mb-10">
+          <button 
+            onClick={handleCloseSubMenu}
+            className="w-12 h-12 rounded-2xl bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:translate-y-1 active:border-b-0 transition-all shadow-sm"
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-zinc-900 dark:text-white tracking-tight">Daily Quotes</h1>
+            <p className="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mt-1">Wisdom for your journey</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {QUOTES.map((q, idx) => (
+            <div key={idx} className="p-8 bg-zinc-50 dark:bg-zinc-900/50 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] relative overflow-hidden">
+              <Quote className="absolute -top-4 -left-4 w-24 h-24 text-accent/10 -rotate-12" />
+              <p className="text-base font-black text-zinc-900 dark:text-white leading-relaxed relative z-10">
+                "{i18n.language === 'km' ? q.kh : q.en}"
+              </p>
+              <div className="mt-4 flex items-center gap-3 relative z-10">
+                <div className="w-8 h-1 bg-accent rounded-full" />
+                <span className="text-[11px] font-black uppercase tracking-widest text-zinc-400">
+                  {i18n.language === 'km' ? q.authorKh : q.authorEn}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button 
+          onClick={handleCloseSubMenu}
+          className="w-full mt-10 p-4 h-16 bg-accent text-white font-black uppercase tracking-[0.3em] text-base rounded-full border-b-8 border-accent/80 active:translate-y-2 active:border-b-0 transition-all shadow-xl shadow-accent/20 sticky bottom-8"
+        >
+          Stay Inspired
         </button>
       </motion.div>
     );
@@ -695,9 +1079,30 @@ export default function Settings({
           <CheckCircle2 size={12} />
           <span className="text-[10px] font-black uppercase tracking-widest leading-none">{user?.email || 'Guest'}</span>
         </div>
-        <p className="mt-4 text-[10px] font-bold text-zinc-400 uppercase tracking-[0.2em]">
-          Productivity Score: {productivityScore}
-        </p>
+        
+        {/* Level and XP Section */}
+        <div className="w-full mt-6 space-y-3 px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 bg-indigo-500/10 text-indigo-500 px-3 py-1 rounded-full border border-indigo-500/20">
+               <Zap size={12} className="fill-current" />
+               <span className="text-[10px] font-black uppercase tracking-widest">Lv. {level}</span>
+            </div>
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+              XP: {totalXP % 500} / 500
+            </span>
+          </div>
+          <div className="w-full h-3 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden p-0.5 shadow-inner">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${levelProgress}%` }}
+              transition={{ duration: 1, delay: 0.2 }}
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full shadow-[0_0_10px_rgba(99,102,241,0.4)]"
+            />
+          </div>
+          <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">
+            {500 - (totalXP % 500)} XP to Next Level
+          </p>
+        </div>
       </div>
 
       {/* PROFILE SECTION */}
@@ -726,14 +1131,14 @@ export default function Settings({
                 <button 
                   onClick={() => {
                     onUpdateUser({ name: editName });
-                    setIsEditingProfile(false);
+                    handleCloseProfile();
                   }}
                   className="flex-1 bg-accent text-white font-black uppercase tracking-widest py-4 rounded-2xl shadow-lg shadow-accent/20 border-b-4 border-accent/80 active:translate-y-1 active:border-b-0 transition-all text-sm"
                 >
                   {t('save')}
                 </button>
                 <button 
-                  onClick={() => setIsEditingProfile(false)}
+                  onClick={handleCloseProfile}
                   className="flex-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-black uppercase tracking-widest py-4 rounded-2xl border-b-4 border-zinc-200 dark:border-zinc-900 active:translate-y-1 active:border-b-0 transition-all text-sm"
                 >
                   {t('cancel')}
@@ -752,7 +1157,10 @@ export default function Settings({
               icon={User} 
               label={t('personal_info')} 
               value={user?.name || 'Explorer'} 
-              onClick={() => setIsEditingProfile(true)} 
+              onClick={() => {
+                lastScrollPos.current = window.scrollY;
+                setIsEditingProfile(true);
+              }} 
               color="blue"
             />
             <SettingRow 
@@ -760,14 +1168,14 @@ export default function Settings({
               label={t('security_password')} 
               value="Manage access" 
               color="amber" 
-              onClick={() => setActiveSubMenu('security_password')}
+              onClick={() => handleOpenSubMenu('security_password')}
             />
             <SettingRow 
               icon={Smartphone} 
               label={t('connected_accounts')} 
               value="Google Connected" 
               color="purple" 
-              onClick={() => setActiveSubMenu('connected_accounts')}
+              onClick={() => handleOpenSubMenu('connected_accounts')}
             />
           </motion.div>
         )}
@@ -820,7 +1228,7 @@ export default function Settings({
         icon={Globe} 
         label={t('language_selector')} 
         value={languages.find(l => l.code === i18n.language)?.label || 'English'} 
-        onClick={() => setActiveSubMenu('language')}
+        onClick={() => handleOpenSubMenu('language')}
         color="blue"
       />
 
@@ -828,7 +1236,7 @@ export default function Settings({
         icon={theme === 'amoled' ? Moon : theme === 'dark' ? Moon : Sun} 
         label={t('theme_mode')} 
         value={theme.toUpperCase()} 
-        onClick={() => setActiveSubMenu('theme')}
+        onClick={() => handleOpenSubMenu('theme')}
         color="amber"
       />
 
@@ -843,7 +1251,7 @@ export default function Settings({
           currentSettings.accentColor === '#10b981' ? 'Emerald' :
           currentSettings.accentColor === '#3b82f6' ? 'Blue' : 'Custom'
         }
-        onClick={() => setActiveSubMenu('accentColor')}
+        onClick={() => handleOpenSubMenu('accentColor')}
       />
 
       <SettingRow icon={Speaker} label={t('sound_effects')} color="amber">
@@ -871,9 +1279,27 @@ export default function Settings({
       {/* PRODUCTIVITY */}
       <SectionTitle>{t('settings_productivity')}</SectionTitle>
       <div className="flex flex-col gap-1">
-        <SettingRow icon={Timer} label="Pomodoro Work" value={`${currentSettings.productivity?.pomoWork} mins`} color="rose" />
-        <SettingRow icon={Droplets} label="Water Target" value={`${currentSettings.productivity?.waterTarget} glasses`} color="blue" />
-        <SettingRow icon={RefreshCw} label="Habit Tracking" value="Cloud Sync Active" color="emerald" />
+        <SettingRow 
+          icon={Timer} 
+          label="Pomodoro Focus" 
+          value={`${currentSettings.productivity?.pomoWork} mins`} 
+          color="rose" 
+          onClick={() => handleOpenSubMenu('productivity')}
+        />
+        <SettingRow 
+          icon={Droplets} 
+          label="Water Target" 
+          value={`${currentSettings.productivity?.waterTarget} glasses`} 
+          color="blue" 
+          onClick={() => setActiveSubMenu('productivity')}
+        />
+        <SettingRow 
+          icon={RefreshCw} 
+          label="Productivity Settings" 
+          value="Configure Goals" 
+          color="emerald" 
+          onClick={() => setActiveSubMenu('productivity')}
+        />
       </div>
 
       {/* AI ASSISTANT */}
@@ -888,7 +1314,7 @@ export default function Settings({
               <Bot size={32} className="text-white" />
             </div>
             <div>
-              <h3 className="text-2xl font-black text-white tracking-tight">Benjie AI</h3>
+              <h3 className="text-2xl font-black text-white tracking-tight">FlowCoach AI</h3>
               <p className="text-white/80 text-[10px] font-bold uppercase tracking-[0.2em] mt-1">Smarter Productivity</p>
             </div>
           </div>
@@ -899,7 +1325,7 @@ export default function Settings({
              </div>
              <div className="flex items-center justify-between p-4 bg-white/10 rounded-2xl border border-white/20">
                 <span className="text-white text-sm font-black tracking-tight">Auto Schedules</span>
-                <Toggle active={true} onToggle={() => {}} />
+                <Toggle active={currentSettings.notifications?.aiAutoSchedules} onToggle={() => handleNestedToggle('notifications', 'aiAutoSchedules', !currentSettings.notifications?.aiAutoSchedules)} />
              </div>
           </div>
         </div>
@@ -909,22 +1335,24 @@ export default function Settings({
       <SectionTitle>{t('settings_localized')}</SectionTitle>
       <div className="grid grid-cols-2 gap-4">
         <motion.div 
+          onClick={() => handleOpenSubMenu('khmer_holidays')}
           whileTap={{ scale: 0.95, y: 2 }}
-          className="p-6 bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] flex flex-col items-center gap-4 transition-all active:border-b-0"
+          className="p-6 bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] flex flex-col items-center gap-4 transition-all active:border-b-0 cursor-pointer"
         >
           <div className="w-14 h-14 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-500 shadow-sm">
             <Calendar size={28} strokeWidth={2.5} />
           </div>
-          <span className="text-xs font-black uppercase text-center tracking-widest leading-tight text-zinc-900 dark:text-white">Khmer Holiday<br/>Calendar</span>
+          <span className="text-xs font-black uppercase text-center tracking-widest leading-tight text-zinc-900 dark:text-white">All Holiday Area<br/>Events</span>
         </motion.div>
         <motion.div 
+          onClick={() => handleOpenSubMenu('daily_quotes')}
           whileTap={{ scale: 0.95, y: 2 }}
-          className="p-6 bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] flex flex-col items-center gap-4 transition-all active:border-b-0"
+          className="p-6 bg-white dark:bg-zinc-900 border-b-4 border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] flex flex-col items-center gap-4 transition-all active:border-b-0 cursor-pointer"
         >
           <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 shadow-sm">
             <Quote size={28} strokeWidth={2.5} />
           </div>
-          <span className="text-xs font-black uppercase text-center tracking-widest leading-tight text-zinc-900 dark:text-white">Khmer Daily<br/>Quotes</span>
+          <span className="text-xs font-black uppercase text-center tracking-widest leading-tight text-zinc-900 dark:text-white">Daily Wisdom<br/>Quotes</span>
         </motion.div>
       </div>
 
@@ -934,7 +1362,13 @@ export default function Settings({
         <SettingRow icon={Fingerprint} label="Face ID / Touch ID" color="emerald">
           <Toggle active={currentSettings.security?.faceIdEnabled} onToggle={() => handleNestedToggle('security', 'faceIdEnabled', !currentSettings.security?.faceIdEnabled)} />
         </SettingRow>
-        <SettingRow icon={Shield} label="Two-Factor Auth" value="Manage" color="blue" />
+        <SettingRow 
+          icon={Shield} 
+          label="Two-Factor Auth" 
+          value="Manage" 
+          color="blue" 
+          onClick={() => handleOpenSubMenu('security_2fa')}
+        />
       </div>
 
       {/* SUPPORT */}
@@ -942,7 +1376,12 @@ export default function Settings({
       <div className="flex flex-col gap-1">
         <SettingRow icon={HelpCircle} label="Help Center" color="zinc" />
         <SettingRow icon={Bug} label="Report a Bug" color="zinc" />
-        <SettingRow icon={FileText} label="Terms & Privacy" color="zinc" />
+        <SettingRow 
+          icon={FileText} 
+          label="Terms & Privacy" 
+          color="zinc" 
+          onClick={() => handleOpenSubMenu('privacy_terms')}
+        />
         <SettingRow icon={Info} label="About DayFlow" value="Version 2.4.0 (Gold)" color="zinc" />
       </div>
 
@@ -969,3 +1408,5 @@ export default function Settings({
     </motion.div>
   );
 }
+
+// End of file

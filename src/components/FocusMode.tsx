@@ -7,16 +7,29 @@ import confetti from 'canvas-confetti';
 
 interface FocusModeProps {
   onClose: () => void;
+  settings?: any;
+  setToast?: (toast: any) => void;
 }
 
-export default function FocusMode({ onClose }: FocusModeProps) {
+export default function FocusMode({ onClose, settings, setToast }: FocusModeProps) {
   const { t } = useTranslation();
-  const [totalDuration, setTotalDuration] = useState(25 * 60);
-  const [timeLeft, setTimeLeft] = useState(25 * 60);
+  const defaultWorkMins = settings?.productivity?.pomoWork || 25;
+  const [totalDuration, setTotalDuration] = useState(defaultWorkMins * 60);
+  const [timeLeft, setTimeLeft] = useState(defaultWorkMins * 60);
   const [isActive, setIsActive] = useState(false);
+  const [mode, setMode] = useState<'work' | 'break'>('work');
   const [selectedSound, setSelectedSound] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [customMinutes, setCustomMinutes] = useState('25');
+  const [customMinutes, setCustomMinutes] = useState(defaultWorkMins.toString());
+
+  useEffect(() => {
+    if (!isActive && mode === 'work') {
+      const mins = settings?.productivity?.pomoWork || 25;
+      setTotalDuration(mins * 60);
+      setTimeLeft(mins * 60);
+      setCustomMinutes(mins.toString());
+    }
+  }, [settings?.productivity?.pomoWork, isActive, mode]);
 
   const sounds = [
     { id: 'rain', label: 'Rain', url: 'https://actions.google.com/sounds/v1/water/rain_on_roof.ogg' },
@@ -34,6 +47,21 @@ export default function FocusMode({ onClose }: FocusModeProps) {
     } else if (timeLeft === 0 && isActive) {
       clearInterval(interval);
       setIsActive(false);
+      
+      if (mode === 'work') {
+        const breakMins = settings?.productivity?.pomoBreak || 5;
+        setMode('break');
+        setTotalDuration(breakMins * 60);
+        setTimeLeft(breakMins * 60);
+        setToast?.({ title: "Work Complete!", message: "Time for a well-deserved break!", type: 'success' });
+      } else {
+        const workMins = settings?.productivity?.pomoWork || 25;
+        setMode('work');
+        setTotalDuration(workMins * 60);
+        setTimeLeft(workMins * 60);
+        setToast?.({ title: "Break Over!", message: "Back to the flow!", type: 'info' });
+      }
+
       confetti({
         particleCount: 150,
         spread: 80,
@@ -145,7 +173,7 @@ export default function FocusMode({ onClose }: FocusModeProps) {
             </motion.div>
           </motion.div>
           <p className="text-[10px] font-black text-zinc-400 dark:text-zinc-500 uppercase tracking-[0.5em] mt-1">
-            Focus
+            {mode === 'work' ? 'Focus' : 'Break'}
           </p>
         </div>
       </div>

@@ -73,7 +73,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidHabit(incoming());
       allow update: if isSignedIn() && existing().userId == request.auth.uid && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'icon', 'streak', 'history', 'time'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['title', 'icon', 'streak', 'history', 'time', 'category', 'description', 'location', 'startDate'])
       );
       allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
@@ -94,6 +94,11 @@ service cloud.firestore {
 
     // Settings Rules
     match /users/{userId}/settings/{settingId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Daily Stats Rules
+    match /users/{userId}/dailyStats/{dateId} {
       allow read, write: if isOwner(userId);
     }
 

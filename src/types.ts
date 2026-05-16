@@ -1,8 +1,8 @@
 export enum TaskCategory {
   STUDY = "study",
   WORK = "work",
-  BUSINESS = "business",
-  PERSONAL = "personal"
+  HEALTH = "health",
+  LIFE = "life"
 }
 
 export enum TaskPriority {
@@ -27,7 +27,11 @@ export interface Task {
 export interface Habit {
   id: string;
   title: string;
+  description?: string;
   time?: string; // HH:mm format
+  location?: string;
+  category?: TaskCategory;
+  startDate?: string;
   history: string[]; // ISO string dates (YYYY-MM-DD)
   streak: number;
   userId: string;

@@ -21,7 +21,7 @@ import BottomNav from './components/BottomNav';
 import FocusMode from './components/FocusMode';
 import NotificationToast from './components/NotificationToast';
 import Auth from './components/Auth';
-import { Task } from './types';
+import { Task, TaskCategory, TaskPriority } from './types';
 
 // Utils
 import { audioService } from './lib/audio';
@@ -42,6 +42,7 @@ export default function App() {
   const [settings, setSettings] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<any[]>([]);
+  const [dailyStats, setDailyStats] = useState<any>({ waterIntake: 0 });
   
   // Notification State
   const [activeNotification, setActiveNotification] = useState<{ id: string, title: string, message: string, type: 'upcoming' | 'late' | 'motivation' } | null>(null);
@@ -74,8 +75,6 @@ export default function App() {
     if (settings?.accentColor) {
       document.documentElement.style.setProperty('--accent-color', settings.accentColor);
       
-      // Convert hex to RGB for opacity supporting shadows if needed
-      // Simple hex to rgb conversion
       const hex = settings.accentColor.replace('#', '');
       const r = parseInt(hex.substring(0, 2), 16);
       const g = parseInt(hex.substring(2, 4), 16);
@@ -88,14 +87,12 @@ export default function App() {
     // Auth Listener
     const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
       if (fbUser) {
-        // Sync user profile from Firestore
         const userDocRef = doc(db, 'users', fbUser.uid);
         const userDoc = await getDoc(userDocRef);
         
         if (userDoc.exists()) {
           setUser({ ...userDoc.data(), id: fbUser.uid });
         } else {
-          // Create new user profile
           const newUser = {
             id: fbUser.uid,
             uid: fbUser.uid,
@@ -108,13 +105,12 @@ export default function App() {
           await setDoc(userDocRef, newUser);
           setUser(newUser);
 
-          // Create default settings
           const settingsRef = doc(db, 'users', fbUser.uid, 'settings', 'current');
           await setDoc(settingsRef, {
             userId: fbUser.uid,
             language: i18n.language || 'en',
             theme: 'dark',
-            accentColor: '#6366f1', // Classic Indigo
+            accentColor: '#6366f1',
             soundEnabled: true,
             hapticEnabled: true,
             animationsEnabled: true,
@@ -123,7 +119,8 @@ export default function App() {
               taskReminders: true,
               dailyMotivation: true,
               studyReminders: true,
-              aiAssistant: true
+              aiAssistant: true,
+              aiAutoSchedules: true
             },
             productivity: {
               pomoWork: 25,
@@ -144,14 +141,12 @@ export default function App() {
       setIsLoading(false);
     });
 
-    // Check for stored theme
     const storedTheme = localStorage.getItem('dayflow_theme') as any;
     if (storedTheme) setTheme(storedTheme);
     
     return () => unsubscribeAuth();
-  }, []);
+  }, [i18n.language]);
 
-  // Sync Settings, Tasks and Habits from Firestore
   useEffect(() => {
     if (!user) {
       setTasks([]);
@@ -184,24 +179,31 @@ export default function App() {
       setHabits(habitList);
     });
 
+    const todayStr = new Date().toISOString().split('T')[0];
+    const statsRef = doc(db, 'users', user.id, 'dailyStats', todayStr);
+    const unsubscribeStats = onSnapshot(statsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setDailyStats(snapshot.data());
+      } else {
+        setDailyStats({ waterIntake: 0 });
+      }
+    });
+
     return () => {
       unsubscribeSettings();
       unsubscribeTasks();
       unsubscribeHabits();
+      unsubscribeStats();
     };
-  }, [user]);
+  }, [user, i18n]);
 
-  // Sync Services with Settings & Show Motivation
   useEffect(() => {
     if (settings) {
       audioService.setEnabled(settings.soundEnabled ?? true);
       hapticService.setEnabled(settings.hapticEnabled ?? true);
 
-      // Show daily motivation once per session
       if (settings.notifications?.dailyMotivation && !hasShownMotivation && !isLoading) {
         const randomQuote = motivationalQuotes[Math.floor(Math.random() * motivationalQuotes.length)];
-        
-        // Short delay for better UX after login/load
         const timer = setTimeout(() => {
           setActiveNotification({
             id: 'daily-motivation',
@@ -210,17 +212,13 @@ export default function App() {
             type: 'motivation'
           });
           setHasShownMotivation(true);
-          
-          // Motivation hides faster (5s)
           setTimeout(() => setActiveNotification(null), 5000);
         }, 1500);
-        
         return () => clearTimeout(timer);
       }
     }
   }, [settings, hasShownMotivation, isLoading]);
 
-  // Update Settings in Firestore
   const updateSettings = async (updatedData: any) => {
     if (!user) return;
     try {
@@ -231,16 +229,13 @@ export default function App() {
     }
   };
 
-  // Notification Checker
   useEffect(() => {
     if (!user || (tasks.length === 0 && habits.length === 0) || !settings?.notifications?.push) return;
 
     const checkInterval = setInterval(() => {
       const now = new Date();
-      // Local YYYY-MM-DD string
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       
-      // Check Tasks
       tasks.forEach(task => {
         if (task.isCompleted || !task.deadline) return;
         
@@ -248,7 +243,6 @@ export default function App() {
         const timeDiff = deadline.getTime() - now.getTime();
         const minutesDiff = Math.floor(timeDiff / (1000 * 60));
 
-        // Upcoming: 5 minutes before
         if (minutesDiff <= 5 && minutesDiff > 0 && !notifiedTaskIds.has(`${task.id}-upcoming`)) {
           audioService.playPop();
           hapticService.medium();
@@ -262,7 +256,6 @@ export default function App() {
           setTimeout(() => setActiveNotification(null), 8000);
         }
         
-        // Late: after deadline
         if (minutesDiff < 0 && !notifiedTaskIds.has(`${task.id}-late`)) {
           audioService.playError();
           hapticService.heavy();
@@ -277,9 +270,8 @@ export default function App() {
         }
       });
 
-      // Check Habits
       habits.forEach(habit => {
-        if (!habit.time || habit.history?.includes(todayStr)) return;
+        if (!settings?.notifications?.studyReminders || !habit.time || habit.history?.includes(todayStr)) return;
 
         const [hours, minutes] = habit.time.split(':').map(Number);
         const habitTimeToday = new Date();
@@ -288,7 +280,6 @@ export default function App() {
         const timeDiff = habitTimeToday.getTime() - now.getTime();
         const minutesDiff = Math.floor(timeDiff / (1000 * 60));
 
-        // Upcoming Habit: 5-10 minutes before
         const upcomingKey = `${habit.id}-upcoming-${todayStr}-${habit.time}`;
         if (minutesDiff <= 5 && minutesDiff > 0 && !notifiedTaskIds.has(upcomingKey)) {
           audioService.playPop();
@@ -303,7 +294,6 @@ export default function App() {
           setTimeout(() => setActiveNotification(null), 8000);
         }
 
-        // Late Habit: immediately after scheduled time if not done
         const lateKey = `${habit.id}-late-${todayStr}-${habit.time}`;
         if (minutesDiff < 0 && minutesDiff > -60 && !notifiedTaskIds.has(lateKey)) {
           audioService.playError();
@@ -318,7 +308,7 @@ export default function App() {
           setTimeout(() => setActiveNotification(null), 8000);
         }
       });
-    }, 10000); // Check every 10 seconds
+    }, 10000);
 
     return () => clearInterval(checkInterval);
   }, [user, tasks, habits, notifiedTaskIds, settings]);
@@ -335,10 +325,6 @@ export default function App() {
     } catch (error) {
       console.error(error);
     }
-  };
-
-  const handleLogin = (userData: any) => {
-    // This is now handled by onAuthStateChanged listener
   };
 
   const handleLogout = async () => {
@@ -371,89 +357,104 @@ export default function App() {
     updateSettings({ theme: nextTheme });
   };
 
+  const updateWater = async (count: number) => {
+    if (!user) return;
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const statsRef = doc(db, 'users', user.id, 'dailyStats', todayStr);
+      await setDoc(statsRef, { waterIntake: count }, { merge: true });
+      audioService.playClick();
+      hapticService.light();
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const openFocusMode = () => setShowFocusMode(true);
   const closeFocusMode = () => setShowFocusMode(false);
   const openSettings = () => setActiveTab('settings');
-  const closeSettings = () => setActiveTab('home');
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-white dark:bg-zinc-900 flex flex-col items-center justify-center z-50 transition-colors duration-500">
+      <div className="fixed inset-0 bg-white dark:bg-zinc-900 flex flex-col items-center justify-center z-50">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
           className="relative w-24 h-24 mb-6"
         >
           <div className="absolute inset-0 bg-indigo-500 rounded-3xl rotate-12 blur-xl opacity-20 animate-pulse" />
-          <div className="relative w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-500/20">
+          <div className="relative w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center shadow-2xl">
             <span className="text-white font-bold text-3xl italic">DF</span>
           </div>
         </motion.div>
-        <motion.h1 
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white mb-2"
-        >
-          DayFlow
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.5 }}
-          transition={{ delay: 0.5 }}
-          className="text-xs text-zinc-400 dark:text-zinc-500 font-medium uppercase tracking-[0.2em]"
-        >
-          {t('developer')}
-        </motion.p>
       </div>
     );
   }
 
-  // If not logged in, show Auth screen
   if (!user) {
-    return <Auth onLogin={handleLogin} />;
+    return <Auth onLogin={() => {}} />;
   }
 
   const goToAssistantWithPrompt = (prompt: string) => {
     setActiveTab('assistant');
-    // We'll use a sessionStorage or a global event to pass this prompt
-    // For simplicity, we can pass it as a prop if we store it in state
     localStorage.setItem('assistant_initial_prompt', prompt);
   };
 
   const renderContent = () => {
     const todayStr = new Date().toISOString().split('T')[0];
-    
-    // XP Calculation
-    // Tasks: 10XP per completion (all time)
     const allCompletedTasksXP = tasks.filter(t => t.isCompleted).length * 10;
-    // Habits: 20XP per completion (all time from history)
     const allHabitsXP = habits.reduce((acc, h) => acc + (h.history?.length || 0), 0) * 20;
     const totalXP = allCompletedTasksXP + allHabitsXP;
     
-    // Today's Progress Calculation
+    // Each level is 500 XP
+    const userLevel = Math.floor(totalXP / 500) + 1;
+    const levelProgress = Math.round(((totalXP % 500) / 500) * 100);
+
     const tasksToday = tasks.filter(t => t.deadline?.startsWith(todayStr));
-    const completedTasksToday = tasksToday.filter(t => t.isCompleted).length;
     
+    // AI Smart Sorting
+    if (settings?.notifications?.aiAssistant) {
+      tasksToday.sort((a, b) => {
+        // First by completion status
+        if (a.isCompleted !== b.isCompleted) {
+          return a.isCompleted ? 1 : -1;
+        }
+        
+        // Then by priority
+        const priorityScore = { [TaskPriority.HIGH]: 3, [TaskPriority.MEDIUM]: 2, [TaskPriority.LOW]: 1 };
+        const scoreA = priorityScore[a.priority] || 0;
+        const scoreB = priorityScore[b.priority] || 0;
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        
+        // Then by time (only if time is specified)
+        const hasTimeA = a.deadline?.includes('T') && !a.deadline.endsWith('T00:00:00.000Z');
+        const hasTimeB = b.deadline?.includes('T') && !b.deadline.endsWith('T00:00:00.000Z');
+        
+        if (hasTimeA && hasTimeB) {
+          return a.deadline!.localeCompare(b.deadline!);
+        } else if (hasTimeA) {
+          return -1;
+        } else if (hasTimeB) {
+          return 1;
+        }
+        
+        return 0;
+      });
+    }
+
+    const completedTasksToday = tasksToday.filter(t => t.isCompleted).length;
     const activeHabits = habits.length;
     const completedHabitsToday = habits.filter(h => h.history.includes(todayStr)).length;
-    
     const totalTodayActions = tasksToday.length + activeHabits;
     const completedTodayActions = completedTasksToday + completedHabitsToday;
-    
-    const todaysProgress = totalTodayActions > 0 
-      ? Math.round((completedTodayActions / totalTodayActions) * 100) 
-      : 0;
-    
-    // Streak (simple mock based on habits for now, or just some value)
+    const todaysProgress = totalTodayActions > 0 ? Math.round((completedTodayActions / totalTodayActions) * 100) : 0;
     const activeStreak = habits.reduce((max, h) => Math.max(max, h.streak), 0) || (completedTasksToday > 0 ? 1 : 0);
 
     const taskStats = {
-      study: tasks.filter(t => t.category === 'study').length,
-      work: tasks.filter(t => t.category === 'work').length,
-      personal: tasks.filter(t => t.category === 'personal').length,
-      business: tasks.filter(t => t.category === 'business').length,
+      study: tasksToday.filter(t => t.category === TaskCategory.STUDY).length,
+      work: tasksToday.filter(t => t.category === TaskCategory.WORK).length,
+      health: tasksToday.filter(t => t.category === TaskCategory.HEALTH).length,
+      life: tasksToday.filter(t => t.category === TaskCategory.LIFE).length,
     };
 
     switch (activeTab) {
@@ -464,27 +465,23 @@ export default function App() {
           userName={user.name} 
           userAvatar={user.avatar} 
           onPlanMyDay={() => goToAssistantWithPrompt(t('plan_my_day'))}
-          stats={{
-            xp: totalXP,
-            streak: activeStreak,
-            level: Math.floor(totalXP / 500) + 1, // Every 500XP is a level
-            progress: todaysProgress
-          }}
+          stats={{ xp: totalXP, streak: activeStreak, level: userLevel, progress: levelProgress, todaysProgress }}
+          tasks={tasksToday}
           taskStats={taskStats}
           habits={habits}
           onMoodSelect={(mood) => updateUser({ lastMood: mood })}
           userMood={user.lastMood}
+          waterIntake={dailyStats?.waterIntake || 0}
+          waterTarget={settings?.productivity?.waterTarget || 8}
+          onUpdateWater={updateWater}
         />
       );
-      case 'planner': return <Planner initialTasks={tasks} />;
+      case 'planner': return <Planner initialTasks={tasks} settings={settings} onBack={() => setActiveTab('home')} />;
       case 'habits': return (
         <Habits 
-          stats={{
-            xp: totalXP,
-            level: Math.floor(totalXP / 500) + 1,
-            progress: todaysProgress
-          }} 
+          stats={{ xp: totalXP, level: userLevel, progress: levelProgress }} 
           habits={habits}
+          onBack={() => setActiveTab('home')}
         />
       );
       case 'assistant': return <Assistant user={user} onAddTask={handleAddTask} />;
@@ -498,17 +495,17 @@ export default function App() {
           onUpdateSettings={updateSettings}
           theme={theme}
           onToggleTheme={toggleTheme}
-          productivityScore={totalXP}
+          totalXP={totalXP}
+          level={userLevel}
         />
       );
-      default: return <Dashboard onOpenFocus={openFocusMode} onOpenSettings={openSettings} userName={user.name} onPlanMyDay={() => goToAssistantWithPrompt(t('plan_my_day'))} />;
+      default: return <Dashboard onOpenFocus={openFocusMode} onOpenSettings={openSettings} userName={user.name} onPlanMyDay={() => {}} />;
     }
   };
 
   return (
     <MotionConfig transition={settings?.animationsEnabled === false ? { duration: 0 } : undefined}>
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 flex flex-col pb-24 font-sans selection:bg-indigo-500/30 transition-colors duration-300">
-        {/* Notifications */}
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 flex flex-col pb-24 font-sans transition-colors duration-300">
         <NotificationToast 
           show={!!activeNotification}
           onClose={() => setActiveNotification(null)}
@@ -516,8 +513,6 @@ export default function App() {
           message={activeNotification?.message || ''}
           type={activeNotification?.type || 'upcoming'}
         />
-
-        {/* Scrollable Area */}
         <main className="flex-1 w-full max-w-md mx-auto px-5 pt-8 overflow-x-hidden">
           <AnimatePresence mode="wait">
             <motion.div
@@ -525,19 +520,29 @@ export default function App() {
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              transition={{ duration: 0.2 }}
             >
               {renderContent()}
             </motion.div>
           </AnimatePresence>
         </main>
-
-        {/* Overlays */}
         <AnimatePresence>
-          {showFocusMode && <FocusMode onClose={closeFocusMode} />}
+          {showFocusMode && (
+            <FocusMode 
+              onClose={closeFocusMode} 
+              settings={settings}
+              setToast={(t: any) => {
+                setActiveNotification({
+                  id: Math.random().toString(),
+                  title: t.title,
+                  message: t.message,
+                  type: t.type === 'success' ? 'upcoming' : 'late'
+                });
+                setTimeout(() => setActiveNotification(null), 5000);
+              }}
+            />
+          )}
         </AnimatePresence>
-
-        {/* Navigation */}
         <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
     </MotionConfig>

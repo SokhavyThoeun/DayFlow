@@ -22,7 +22,7 @@
         "userId": { "type": "string" },
         "title": { "type": "string" },
         "description": { "type": "string" },
-        "category": { "type": "string" },
+        "category": { "type": "string", "enum": ["study", "work", "health", "life"] },
         "deadline": { "type": "string", "format": "date-time" },
         "isCompleted": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }

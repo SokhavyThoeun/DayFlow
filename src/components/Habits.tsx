@@ -1,17 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
-import { Trophy, Star, Plus, Check, Edit2, Trash2, X, Clock, AlertTriangle } from 'lucide-react';
+import { Trophy, Star, Plus, Check, Edit2, Trash2, X, Clock, AlertTriangle, MapPin, Calendar, ChevronLeft, Target, Zap, Heart, BookOpen, Tag } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { audioService } from '../lib/audio';
 import { hapticService } from '../lib/haptics';
 import { doc, updateDoc, deleteDoc, setDoc, collection } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
+import { TaskCategory } from '../types';
 
 interface Habit {
   id: string;
   title: string;
+  description?: string;
   time?: string;
+  location?: string;
+  category?: TaskCategory;
+  startDate?: string;
   streak: number;
   history: string[]; // ISO string dates (YYYY-MM-DD)
   createdAt: string;
@@ -24,14 +29,19 @@ interface HabitProps {
     progress: number;
   };
   habits?: Habit[];
+  onBack?: () => void;
 }
 
-export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habits = [] }: HabitProps) {
+export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habits = [], onBack }: HabitProps) {
   const { t } = useTranslation();
   const [showModal, setShowModal] = useState(false);
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null);
   const [habitTitle, setHabitTitle] = useState('');
+  const [habitDescription, setHabitDescription] = useState('');
   const [habitTime, setHabitTime] = useState('');
+  const [habitLocation, setHabitLocation] = useState('');
+  const [habitDate, setHabitDate] = useState(new Date().toISOString().split('T')[0]);
+  const [habitCategory, setHabitCategory] = useState<TaskCategory>(TaskCategory.LIFE);
 
   const handleSaveHabit = async () => {
     if (!habitTitle.trim() || !auth.currentUser) return;
@@ -40,14 +50,22 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
         const habitRef = doc(db, 'habits', editingHabit.id);
         await updateDoc(habitRef, { 
           title: habitTitle,
-          time: habitTime || null
+          description: habitDescription || null,
+          time: habitTime || null,
+          location: habitLocation || null,
+          category: habitCategory || null,
+          startDate: habitDate || null
         });
       } else {
         const habitRef = doc(collection(db, 'habits'));
         await setDoc(habitRef, {
           userId: auth.currentUser.uid,
           title: habitTitle,
+          description: habitDescription || null,
           time: habitTime || null,
+          location: habitLocation || null,
+          category: habitCategory || null,
+          startDate: habitDate || null,
           streak: 0,
           history: [],
           createdAt: new Date().toISOString()
@@ -97,7 +115,10 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
 
   const resetForm = () => {
     setHabitTitle('');
+    setHabitDescription('');
     setHabitTime('');
+    setHabitLocation('');
+    setHabitDate(new Date().toISOString().split('T')[0]);
     setEditingHabit(null);
     setShowModal(false);
   };
@@ -106,7 +127,11 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
     e.stopPropagation();
     setEditingHabit(habit);
     setHabitTitle(habit.title);
+    setHabitDescription(habit.description || '');
     setHabitTime(habit.time || '');
+    setHabitLocation(habit.location || '');
+    setHabitDate(habit.startDate || new Date().toISOString().split('T')[0]);
+    setHabitCategory(habit.category || TaskCategory.LIFE);
     setShowModal(true);
   };
 
@@ -131,7 +156,17 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
   return (
     <div className="space-y-8 pb-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">{t('nav_habits')}</h1>
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="p-2 -ml-2 rounded-full hover:bg-zinc-100 dark:hover:bg-white/5 text-zinc-400 active:scale-90 transition-all"
+            >
+              <ChevronLeft size={24} />
+            </button>
+          )}
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-white tracking-tight">{t('nav_habits')}</h1>
+        </div>
         <button 
           onClick={() => setShowModal(true)}
           className="w-10 h-10 rounded-full bg-white dark:bg-zinc-800 flex items-center justify-center text-zinc-900 dark:text-white active:scale-95 transition-transform border border-zinc-200 dark:border-white/5 shadow-xl"
@@ -154,9 +189,12 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
           <div className="space-y-3">
             <div>
               <h2 className="text-2xl font-black text-white tracking-tight leading-none mb-1">Active Mastery</h2>
-              <p className="text-[10px] text-white/60 font-black uppercase tracking-widest">Level {stats.level} Progress</p>
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-white/60 font-black uppercase tracking-widest">Level {stats.level} Progress</p>
+                <p className="text-[10px] text-white/90 font-black tracking-widest">{stats.xp % 500} / 500 XP</p>
+              </div>
             </div>
-            <div className="w-40 h-3 bg-black/20 rounded-full overflow-hidden p-0.5 shadow-inner">
+            <div className="w-full min-w-[160px] h-3 bg-black/20 rounded-full overflow-hidden p-0.5 shadow-inner">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${stats.progress}%` }}
@@ -164,6 +202,9 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
                 className="h-full bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,0.6)]" 
               />
             </div>
+            <p className="text-[9px] text-white/40 font-bold uppercase tracking-[0.2em] pt-1">
+              {500 - (stats.xp % 500)} XP to Next Level
+            </p>
           </div>
         </div>
       </section>
@@ -212,7 +253,24 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
                       "w-2.5 h-2.5 rounded-full", 
                       isDoneToday ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-zinc-200 dark:bg-zinc-800"
                     )} />
-                    <span className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em]">{habit.streak} DAY STREAK</span>
+                      <span className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em]">{habit.streak} DAY STREAK</span>
+                      {habit.location && (
+                        <span className="text-[10px] text-zinc-400 font-bold flex items-center gap-1">
+                          <MapPin size={10} className="text-indigo-400" />
+                          {habit.location}
+                        </span>
+                      )}
+                    </div>
+                    {habit.startDate && (
+                      <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest mt-1">
+                         Starts: {new Date(habit.startDate).toLocaleDateString()}
+                      </p>
+                    )}
+                    {habit.description && (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2 line-clamp-2 italic leading-relaxed">
+                        {habit.description}
+                      </p>
+                    )}
                     {habit.time && (
                       <span className={cn(
                         "text-[10px] font-black underline decoration-2 underline-offset-2 px-2 py-0.5 rounded-md flex items-center gap-1 transition-colors",
@@ -226,16 +284,16 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
                       </span>
                     )}
                   </div>
-                </div>
-                <button 
+                <motion.button 
+                  whileTap={{ scale: 0.8 }}
                   onClick={() => handleToggleHabit(habit)}
                   className={cn(
-                    "w-14 h-14 rounded-[1.5rem] flex items-center justify-center group active:scale-90 transition-all shadow-xl",
+                    "w-14 h-14 rounded-[1.5rem] flex items-center justify-center group transition-all shadow-xl",
                     isDoneToday ? "bg-emerald-500 shadow-emerald-500/30" : "bg-indigo-500 shadow-indigo-500/30"
                   )}
                 >
                   <Check className={cn("w-7 h-7 text-white transition-transform", isDoneToday && "scale-110 shadow-glow")} strokeWidth={4} />
-                </button>
+                </motion.button>
               </div>
 
               {/* Weekly Progress Dots */}
@@ -287,7 +345,12 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
               className="relative bg-white dark:bg-zinc-900 w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 space-y-8 shadow-2xl"
             >
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">{editingHabit ? 'Edit Habit' : 'New Habit'}</h2>
+                <div className="flex items-center gap-2">
+                  <button onClick={resetForm} className="p-2 -ml-2 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-full text-zinc-400 group transition-colors">
+                    <ChevronLeft size={24} className="group-active:scale-90 transition-transform" />
+                  </button>
+                  <h2 className="text-2xl font-bold text-zinc-900 dark:text-white">{editingHabit ? t('edit_habit') : t('add_habit')}</h2>
+                </div>
                 <button onClick={resetForm} className="p-2 hover:bg-zinc-100 dark:hover:bg-white/5 rounded-full text-zinc-400">
                   <X size={24} />
                 </button>
@@ -295,9 +358,8 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
               
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Habit Name</label>
-                  <input 
-                    type="text" 
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">{t('habit_name')}</label>
+                  <textarea 
                     value={habitTitle}
                     onChange={(e) => setHabitTitle(e.target.value)}
                     placeholder="e.g. Read for 20 mins"
@@ -306,22 +368,82 @@ export default function Habits({ stats = { xp: 0, level: 1, progress: 0 }, habit
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">{t('date')}</label>
+                    <input 
+                      type="date" 
+                      value={habitDate}
+                      onChange={(e) => setHabitDate(e.target.value)}
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5 rounded-3xl py-4 px-6 text-sm font-bold text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">{t('time')}</label>
+                    <input 
+                      type="time" 
+                      value={habitTime}
+                      onChange={(e) => setHabitTime(e.target.value)}
+                      className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5 rounded-3xl py-4 px-6 text-sm font-bold text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-4">
-                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">Reminder Time (Optional)</label>
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">{t('location')}</label>
                   <input 
-                    type="time" 
-                    value={habitTime}
-                    onChange={(e) => setHabitTime(e.target.value)}
-                    className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5 rounded-3xl py-5 px-6 text-xl font-bold text-zinc-900 dark:text-white focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
+                    type="text" 
+                    value={habitLocation}
+                    onChange={(e) => setHabitLocation(e.target.value)}
+                    placeholder="Where?"
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5 rounded-3xl py-5 px-6 text-lg font-bold text-zinc-900 dark:text-white placeholder-zinc-300 dark:placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-all shadow-inner"
                   />
                 </div>
 
-                <div className="flex gap-4">
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">{t('description')}</label>
+                  <textarea 
+                    value={habitDescription}
+                    onChange={(e) => setHabitDescription(e.target.value)}
+                    placeholder="Extra notes or motivation..."
+                    className="w-full bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-white/5 rounded-3xl py-5 px-6 text-lg font-bold text-zinc-900 dark:text-white placeholder-zinc-300 dark:placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-all shadow-inner resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest ml-1">{t('category')}</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: TaskCategory.LIFE, icon: Target, label: t('cat_life'), color: 'indigo' },
+                      { id: TaskCategory.WORK, icon: Zap, label: t('cat_work'), color: 'amber' },
+                      { id: TaskCategory.HEALTH, icon: Heart, label: t('cat_health'), color: 'rose' },
+                      { id: TaskCategory.STUDY, icon: BookOpen, label: t('cat_study'), color: 'emerald' },
+                    ].map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setHabitCategory(cat.id)}
+                        className={cn(
+                          "flex items-center gap-3 p-3 rounded-2xl border transition-all text-[11px] font-black uppercase tracking-wider",
+                          habitCategory === cat.id 
+                            ? "bg-indigo-500 border-indigo-500 text-white" 
+                            : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-white/5 text-zinc-400 hover:border-indigo-500/30"
+                        )}
+                      >
+                        <cat.icon size={14} />
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex gap-4 p-2">
                   <button 
                     onClick={handleSaveHabit}
                     className="flex-1 py-5 bg-indigo-500 text-white font-bold rounded-3xl shadow-xl shadow-indigo-500/20 active:scale-95 transition-all text-lg"
                   >
-                    {editingHabit ? 'Apply Changes' : 'Create Habit'}
+                    {editingHabit ? t('save') : t('add_habit')}
                   </button>
                 </div>
               </div>
